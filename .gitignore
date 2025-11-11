@@ -1,4 +1,6 @@
-/__pycache__/
+__pycache__/
 /output/
 /test_results/
+/build/
+/dist/
 .env
