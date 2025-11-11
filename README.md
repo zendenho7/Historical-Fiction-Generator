@@ -38,6 +38,7 @@ All dependencies are listed in `requirements.txt`:
 - `streamlit==1.28.0` - Web UI framework
 - `pyinstaller>=6.0.0` - EXE building
 
+### Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
@@ -86,6 +87,12 @@ python test_runner.py
 python test_runner.py --quick
 ```
 
+## Build EXE
+Ensure your .env is already configured before building exe
+```bash
+build.bat
+```
+
 ## 📊 Output Files
 
 ### Automated Test Results
@@ -102,3 +109,6 @@ Manual test outputs are saved in `output/` directory:
 - `filename.txt` - Pure text content
 - `quick_test_TIMESTAMP.json` - Auto-saved quick test results
 - `quick_test_TIMESTAMP.txt` - Auto-saved quick test content
+
+### EXE Output
+- `dist\HistoricalFictionGenerator\HistoricalFictionGenerator.exe` - exe output
