@@ -39,7 +39,7 @@ pip install -r requirements.txt
 ```plaintext
 # Gemini API Configuration
 GEMINI_API_KEY=your_api_key_here
-MODEL_NAME=gemini-1.5-flash
+MODEL_NAME=gemini-2.0-flash-exp
 MAX_TOKENS=1500
 TEMPERATURE=0.7
 ```
