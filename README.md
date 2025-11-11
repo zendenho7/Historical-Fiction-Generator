@@ -26,25 +26,35 @@ Complete implementation with advanced procedural generation techniques from Tech
 
 ## 📦 Installation
 
+```bash
 pip install -r requirements.txt
+```
 
 ## 🔑 Configuration
 
 1. Get your Gemini API key from: https://aistudio.google.com/app/apikey
-2. Create `.env` file:
-3. Set up env file with params:
-    GEMINI_API_KEY=your_api_key_here
-    MODEL_NAME=gemini-2.0-flash-exp
-    MAX_TOKENS=2000
-    TEMPERATURE=0.7
+2. Create `.env` file in the project root
+3. Add your API key and configuration:
+
+```plaintext
+# Gemini API Configuration
+GEMINI_API_KEY=your_api_key_here
+MODEL_NAME=gemini-1.5-flash
+MAX_TOKENS=1500
+TEMPERATURE=0.7
+```
 
 ## 🚀 Usage
 
 ### Quick Test (Single Generation)
+```bash
 python manual_test.py --quick
+```
 
 ### Interactive Mode (Full Parameter Control)
+```bash
 python manual_test.py
+```
 
 This launches an interactive session where you can:
 - Select theme from 9 options
@@ -55,14 +65,28 @@ This launches an interactive session where you can:
 - Enable/disable multi-stage generation
 
 ### Full Test Suite (20+ Test Cases)
+```bash
 python test_runner.py
+```
 
 ### Quick Test Suite (3 Test Cases)
+```bash
 python test_runner.py --quick
+```
 
 ## 📊 Output Files
-All results saved in `test_results/` directory:
+
+### Automated Test Results
+All automated test results are saved in `test_results/` directory:
 
 - `*_TIMESTAMP.json` - Complete data with all metadata
 - `*_TIMESTAMP.csv` - Spreadsheet format with parameters
 - `*_TIMESTAMP_detailed.txt` - Full content with analysis
+
+### Manual Test Results
+Manual test outputs are saved in `output/` directory:
+
+- `filename.json` - Complete generation data with metadata
+- `filename.txt` - Pure text content
+- `quick_test_TIMESTAMP.json` - Auto-saved quick test results
+- `quick_test_TIMESTAMP.txt` - Auto-saved quick test content
