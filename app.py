@@ -276,16 +276,71 @@ with col2:
             if entities.get('items'):
                 st.write("**Items:**", ", ".join(entities['items'][:3]))
         
-        # Stage information (if multi-stage)
+        # === GENERATION STAGES ===
         if result.get('stages'):
+            st.markdown("---")
+            
             with st.expander("🔄 Generation Stages", expanded=False):
-                for stage in result['stages']:
-                    st.write(f"**Stage {stage['stage']}:** {stage['word_count']} words")
+                stages_data = result['stages']
+                
+                # Handle dictionary format (new implementation)
+                if isinstance(stages_data, dict):
+                    st.markdown("#### Multi-Stage Pipeline Details")
+                    
+                    # Display stage metrics side by side
+                    stage_col1, stage_col2 = st.columns(2)
+                    
+                    with stage_col1:
+                        st.metric(
+                            label="📝 Stage 1: Skeleton",
+                            value=f"{stages_data.get('stage1_word_count', 0)} words",
+                            help="Initial chronology structure with core events"
+                        )
+                    
+                    with stage_col2:
+                        word_diff = stages_data.get('stage2_word_count', 0) - stages_data.get('stage1_word_count', 0)
+                        st.metric(
+                            label="✨ Stage 2: Refined",
+                            value=f"{stages_data.get('stage2_word_count', 0)} words",
+                            delta=f"{word_diff:+d} words",
+                            help="Enhanced with entity tracking and coherence improvements"
+                        )
+                    
+                    # Show Stage 1 preview
+                    if stages_data.get('stage1_preview'):
+                        st.markdown("##### 📄 Stage 1 Preview")
+                        st.text_area(
+                            label="Initial skeleton content",
+                            value=stages_data['stage1_preview'],
+                            height=120,
+                            disabled=True,
+                            label_visibility="collapsed"
+                        )
+                    
+                    # Show refinement process
+                    st.info(
+                        "🔄 **Refinement Process:** "
+                        "Stage 1 generated the skeleton structure. "
+                        "Stage 2 enhanced it with entity cross-references, "
+                        "improved narrative flow, and strengthened cause-effect relationships."
+                    )
+                
+                # Handle list format (backward compatibility)
+                elif isinstance(stages_data, list):
+                    for stage_item in stages_data:
+                        if isinstance(stage_item, dict):
+                            stage_num = stage_item.get('stage', '?')
+                            word_count = stage_item.get('word_count', 'N/A')
+                            st.write(f"**Stage {stage_num}:** {word_count} words")
+                            
+                            if stage_item.get('preview'):
+                                with st.expander(f"View Stage {stage_num} Preview"):
+                                    st.text(stage_item['preview'])
+                
+                else:
+                    st.warning("⚠️ Stages data format not recognized")
     
-    else:
-        st.info("👈 Configure parameters and click 'Generate Chronology' to begin")
-    
-    # Generation history
+    # === GENERATION HISTORY ===
     st.divider()
     st.subheader("📜 Generation History")
     if st.session_state.generation_history:
@@ -296,4 +351,4 @@ with col2:
 
 # Footer
 st.divider()
-st.caption("🎓 Technical Design Project | Enhanced with Course Concepts (Grammar-based Prompts, State Management, Multi-Stage Pipeline)")
+st.caption("🎓 Generative Historical Fiction Tool By Technologia")
