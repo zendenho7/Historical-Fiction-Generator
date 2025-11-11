@@ -1,2 +1,3 @@
-.output/
-._pycache_/
+/__pycache__/
+/output/
+/test_results/
