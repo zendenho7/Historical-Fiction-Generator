@@ -26,6 +26,18 @@ Complete implementation with advanced procedural generation techniques from Tech
 
 ## 📦 Installation
 
+### System Requirements
+- **Python Version:** 3.11.x (Required)
+  - ⚠️ **Python 3.14+ is NOT compatible** due to Streamlit/Pillow dependencies
+  - ✅ **Download Python 3.11.9**: https://www.python.org/downloads/release/python-3119/
+
+### Python Dependencies
+All dependencies are listed in `requirements.txt`:
+- `google-generativeai>=0.3.0` - Gemini API client
+- `python-dotenv>=1.0.0` - Environment configuration
+- `streamlit==1.28.0` - Web UI framework
+- `pyinstaller>=6.0.0` - EXE building
+
 ```bash
 pip install -r requirements.txt
 ```
