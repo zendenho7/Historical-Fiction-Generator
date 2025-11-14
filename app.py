@@ -1,6 +1,3 @@
-Here's your complete updated `app.py` with all the requested implementations:
-
-```python
 """
 Professional UI for GenAI Historical Fiction Tool
 Instructor evaluation-friendly with all parameters exposed
@@ -273,25 +270,25 @@ with st.sidebar:
         )
     with col2:
         st.markdown("ℹ️", help="""
-**Time Span** controls the chronology's temporal scope:
+        **Time Span** controls the chronology's temporal scope:
 
-**Brief (decades)**
-- Covers 20-100 years
-- 3-5 major events
-- Target: 500-700 words
-- Example: A kingdom's founding decade
+        **Brief (decades)**
+        - Covers 20-100 years
+        - 3-5 major events
+        - Target: 500-700 words
+        - Example: A kingdom's founding decade
 
-**Moderate (centuries)**
-- Covers 100-500 years
-- 5-8 major events
-- Target: 650-900 words
-- Example: Rise and fall of a dynasty
+        **Moderate (centuries)**
+        - Covers 100-500 years
+        - 5-8 major events
+        - Target: 650-900 words
+        - Example: Rise and fall of a dynasty
 
-**Epic (millennia)**
-- Covers 500+ years
-- 8-12 major events
-- Target: 800-1000 words
-- Example: Entire civilization history
+        **Epic (millennia)**
+        - Covers 500+ years
+        - 8-12 major events
+        - Target: 800-1000 words
+        - Example: Entire civilization history
         """)
     
     # Show estimated word count
@@ -312,24 +309,24 @@ with st.sidebar:
         )
     with col2:
         st.markdown("ℹ️", help="""
-**Event Density** controls detail level and number of events:
+        **Event Density** controls detail level and number of events:
 
-**Sparse (3-5 events)**
-- Major milestones only
-- Broad strokes narrative
-- More space between events
-- Example: Key turning points only
+        **Sparse (3-5 events)**
+        - Major milestones only
+        - Broad strokes narrative
+        - More space between events
+        - Example: Key turning points only
 
-**Moderate (5-8 events)**
-- Balanced coverage
-- Important events with context
-- Recommended for most uses
+        **Moderate (5-8 events)**
+        - Balanced coverage
+        - Important events with context
+        - Recommended for most uses
 
-**Rich (8-12 events)**
-- Detailed chronology
-- Many interconnected events
-- Dense narrative
-- Example: Year-by-year coverage
+        **Rich (8-12 events)**
+        - Detailed chronology
+        - Many interconnected events
+        - Dense narrative
+        - Example: Year-by-year coverage
         """)
     
     # Show event count estimate
@@ -350,27 +347,27 @@ with st.sidebar:
         )
     with col2:
         st.markdown("ℹ️", help="""
-**Narrative Focus** shapes content emphasis:
+        **Narrative Focus** shapes content emphasis:
 
-**Political**
-Governments, leaders, alliances, treaties
-- Focus on power dynamics and governance
+        **Political**
+        Governments, leaders, alliances, treaties
+        - Focus on power dynamics and governance
 
-**Cultural**
-Arts, traditions, religions, customs
-- Focus on societal values and cultural evolution
+        **Cultural**
+        Arts, traditions, religions, customs
+        - Focus on societal values and cultural evolution
 
-**Military**
-Wars, battles, conquests, defenses
-- Focus on conflicts and military campaigns
+        **Military**
+        Wars, battles, conquests, defenses
+        - Focus on conflicts and military campaigns
 
-**Economic**
-Trade, resources, wealth, commerce
-- Focus on prosperity and economic systems
+        **Economic**
+        Trade, resources, wealth, commerce
+        - Focus on prosperity and economic systems
 
-**Personal**
-Individuals, families, relationships
-- Focus on human stories and lineages
+        **Personal**
+        Individuals, families, relationships
+        - Focus on human stories and lineages
         """)
     
     focus_icons = {
@@ -393,19 +390,19 @@ Individuals, families, relationships
         )
     with col2:
         st.markdown("ℹ️", help="""
-**Multi-Stage Generation** uses a two-phase process:
+        **Multi-Stage Generation** uses a two-phase process:
 
-**Enabled (Recommended)**
-- Stage 1: Generate skeleton structure
-- Stage 2: Refine with entity tracking
-- Higher quality, more coherent output
-- Takes 25-30 seconds
+        **Enabled (Recommended)**
+        - Stage 1: Generate skeleton structure
+        - Stage 2: Refine with entity tracking
+        - Higher quality, more coherent output
+        - Takes 25-30 seconds
 
-**Disabled (Faster)**
-- Single-pass generation
-- Faster (10-15 seconds)
-- Lower coherence and consistency
-- Not recommended for final outputs
+        **Disabled (Faster)**
+        - Single-pass generation
+        - Faster (10-15 seconds)
+        - Lower coherence and consistency
+        - Not recommended for final outputs
         """)
     
     # Visual indicator for multi-stage
