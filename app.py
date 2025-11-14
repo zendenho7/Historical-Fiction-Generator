@@ -427,4 +427,4 @@ with st.sidebar:
     estimated_words = int(base_word_estimate * time_multiplier[timespan_value] * density_multiplier[eventdensity_value])
     
     # Clamp to valid range
-    estimated_words = max(500
+    estimated_words = max(500)
