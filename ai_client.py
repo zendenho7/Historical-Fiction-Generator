@@ -89,8 +89,14 @@ class HistoricalFictionGenerator:
                 word_range=f"{Config.MIN_WORDS}-{Config.MAX_WORDS} words",
                 character_roster_summary=character_roster_summary,
                 causal_context=causal_context,
-            num_characters=num_characters
+                num_characters=num_characters
             )
+
+            import streamlit as st
+
+            # Display in Streamlit
+            with st.expander("🐛 DEBUG: View Generated Prompt", expanded=False):
+                st.code(base_prompt, language="text")
             
             # TECHNIQUE 2 & 3: Multi-stage pipeline with state tracking
             if use_multi_stage:

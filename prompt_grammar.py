@@ -1,5 +1,3 @@
-# prompt_grammar.py
-
 """
 Grammar-based prompt system with explicit variable slots
 Implements replacement grammar concept from Caves of Qud
@@ -17,11 +15,21 @@ CRITICAL WORD COUNT REQUIREMENT:
 - DO NOT exceed {max_words} words under ANY circumstances
 - Target approximately {target_words} words for optimal results
 
-Your task is to generate a chronological narrative with these specifications:
+THEME & PARAMETERS:
+- Theme: {theme}
 - Time span: {time_span}
 - Event density: {event_density}
 - Narrative focus: {narrative_focus}
-- Theme: {theme}
+
+{character_requirements}
+
+{semantic_guidance}
+
+{custom_specifications}
+
+{character_roster}
+
+{causal_context}
 
 STRUCTURE REQUIREMENTS:
 1. Present events in clear chronological order with specific dates/timeframes
@@ -29,10 +37,6 @@ STRUCTURE REQUIREMENTS:
 3. Create believable cause-and-effect relationships between events
 4. Use rich, evocative language appropriate to the theme
 5. Include specific details that make the history feel authentic
-
-{additional_constraints}
-
-{semantic_guidance}
 
 FORMAT GUIDELINES:
 - Start with a compelling title
@@ -124,73 +128,65 @@ Format your response as a narrative chronology with clear temporal markers.
         # Get theme-specific vocabulary
         vocab = cls.THEME_VOCABULARY.get(theme, {})
         
-        # Build semantic guidance
+        # === BUILD SECTIONS ===
+        
+        # 1. Semantic Guidance (theme-specific vocabulary)
         semantic_guidance = ""
         if vocab:
-            semantic_guidance = f"""
-    SEMANTIC GUIDANCE for {theme}:
-    - Key entity types: {', '.join(vocab.get('entities', []))}
-    - Typical events: {', '.join(vocab.get('events', []))}
-    - Imagery/atmosphere: {', '.join(vocab.get('imagery', []))}
+            semantic_guidance = f"""SEMANTIC GUIDANCE for {theme}:
+- Key entity types: {', '.join(vocab.get('entities', []))}
+- Typical events: {', '.join(vocab.get('events', []))}
+- Imagery/atmosphere: {', '.join(vocab.get('imagery', []))}
 
-    Use these elements naturally in your chronology to maintain thematic consistency.
-    """
+Use these elements naturally in your chronology to maintain thematic consistency."""
         
-        # Build constraints based on custom input
-        additional_constraints = ""
+        # 2. Custom Specifications (user input)
+        custom_specifications = ""
         if custom_input:
-            additional_constraints = f"""
-    CUSTOM SPECIFICATIONS:
-    The chronology must incorporate: {custom_input}
+            custom_specifications = f"""CUSTOM SPECIFICATIONS:
+The chronology must incorporate: {custom_input}
 
-    Use these details as the initial state - they should influence the entities, events, and narrative arc.
-    """
+Use these details as the initial state - they should influence the entities, events, and narrative arc."""
         
-        # NEW: Add character roster section
-        character_section = ""
+        # 3. Character Requirements (only for first generation)
+        character_requirements = ""
+        if not character_roster_summary:  # First event - need to introduce characters
+            character_requirements = f"""CHARACTER GENERATION REQUIREMENT:
+- You MUST introduce exactly {num_characters} distinct main characters in this chronology
+- Give each character a unique name, role, and personality
+- Make sure all {num_characters} characters play meaningful roles in the story
+- Characters should have clear motivations and relationships
+- Distribute character focus appropriately across the timeline
+
+Character distribution:
+  • {max(1, num_characters // 3)} primary protagonist(s) - central to the story
+  • {max(1, num_characters // 2)} supporting character(s) - important roles
+  • {max(1, num_characters - (num_characters // 3) - (num_characters // 2))} minor character(s) - smaller but memorable roles"""
+        
+        # 4. Character Roster (existing characters - subsequent events)
+        character_roster = ""
         if character_roster_summary:
-            character_section = f"""
-    {character_roster_summary}
+            character_roster = f"""{character_roster_summary}
 
-    CRITICAL CHARACTER RULES:
-    - Only use ACTIVE characters in your narrative
-    - NEVER mention DECEASED characters unless they are being revived with in-universe explanation
-    - Maintain consistency with established character states and actions
-    """
+CRITICAL CHARACTER RULES:
+- Only use ACTIVE characters in your narrative
+- NEVER mention DECEASED characters unless reviving them with in-universe explanation
+- Maintain consistency with established character states and actions
+- Reference their previous actions and relationships"""
         
-        # NEW: Add causal context section
-        causal_section = ""
+        # 5. Causal Context (previous events)
+        formatted_causal_context = ""
         if causal_context:
-            causal_section = f"""
-    {causal_context}
+            formatted_causal_context = f"""{causal_context}
 
-    CRITICAL CAUSALITY RULES:
-    - This event MUST connect to and be caused by previous events
-    - Reference specific characters and events from above
-    - Show clear cause-and-effect relationships
-    - Address at least one open plot thread
-    - End with a consequence or hook for the next event
-    """
-
-    # NEW: Character count requirement section
-    character_count_section = ""
-    if not character_roster_summary:  # Only for first generation
-        character_count_section = f"""
-    
-    CHARACTER GENERATION REQUIREMENT:
-    - You MUST introduce exactly {num_characters} main characters in this chronology
-    - Give each character a distinct name, role, and personality
-    - Make sure all {num_characters} characters play meaningful roles in the story
-    - Characters should have clear motivations and relationships
-    - Distribute character focus appropriately across the timeline
-    
-    Character distribution suggestion:
-    - {max(1, num_characters // 3)} primary protagonists (most screen time)
-    - {max(1, num_characters // 2)} supporting characters (important roles)
-    - {max(1, num_characters - (num_characters // 3) - (num_characters // 2))} minor characters (smaller but memorable roles)
-    """
+CRITICAL CAUSALITY RULES:
+- This event MUST be a direct consequence of previous events
+- Reference specific characters and events from above context
+- Show clear cause-and-effect relationships
+- Address at least one open plot thread
+- End with a consequence or hook that leads to the next event"""
         
-        # Assemble full prompt using grammar rules
+        # === ASSEMBLE FULL PROMPT ===
         system_prompt = cls.BASE_STRUCTURE.format(
             min_words=min_words,
             max_words=max_words,
@@ -199,20 +195,11 @@ Format your response as a narrative chronology with clear temporal markers.
             event_density=Config.EVENT_DENSITIES.get(event_density, event_density),
             narrative_focus=Config.NARRATIVE_FOCUSES.get(narrative_focus, narrative_focus),
             theme=theme,
-            additional_constraints=additional_constraints,
-            semantic_guidance=semantic_guidance
+            character_requirements=character_requirements,
+            semantic_guidance=semantic_guidance,
+            custom_specifications=custom_specifications,
+            character_roster=character_roster,
+            causal_context=formatted_causal_context
         )
         
-        # Append character and causal sections
-        if character_section:
-            system_prompt += f"\n\n{character_section}"
-        
-        if causal_section:
-            system_prompt += f"\n\n{causal_section}"
-
-    # Append character count section
-    if character_count_section:
-        system_prompt += f"\n\n{character_count_section}"
-        
         return system_prompt
-

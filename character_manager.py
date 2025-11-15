@@ -316,6 +316,10 @@ class CharacterManager:
         """Get formatted summary of character roster for AI prompt"""
         active = self.get_active_characters()
         deceased = self.get_deceased_characters()
+
+        # Return empty if NO characters at all (both lists empty)
+        if not active and not deceased:
+            return ""
         
         summary = "CHARACTER ROSTER:\n\n"
         
