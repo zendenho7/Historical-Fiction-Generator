@@ -201,5 +201,14 @@ CRITICAL CAUSALITY RULES:
             character_roster=character_roster,
             causal_context=formatted_causal_context
         )
-        
+
+        if character_roster_summary and "ACTIVE CHARACTERS" in character_roster_summary:
+            system_prompt += f"""
+
+        🎭 CHARACTER CONTINUITY REQUIREMENT:
+        You MUST reuse at least 2-3 characters from the ACTIVE CHARACTERS list above.
+        Do NOT introduce completely new major characters unless absolutely necessary for the story.
+        Prefer to develop existing characters rather than adding new ones.
+        """
+            
         return system_prompt

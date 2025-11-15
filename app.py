@@ -15,6 +15,8 @@ import os
 from session_manager import SessionManager
 #from input_validator import InputValidator 
 
+st.session_state.needs_rerun = False
+
 # Page configuration
 st.set_page_config(
     page_title="Historical Fiction Generator",
@@ -147,51 +149,176 @@ with st.sidebar:
     # === SESSION CONTROLS ===
     st.subheader("💾 Session Management")
 
-    col1, col2 = st.columns(2)
+    # Get current session info for display
+    current_session = st.session_state.session_manager
+    gen_count = current_session.metadata.get('generation_count', 0)
+    theme = current_session.metadata.get('theme', 'Untitled')
+
+    # Show current session name prominently
+    if gen_count > 0:
+        # Extract readable parts from session ID
+        session_display = current_session.session_id.replace('_', ' ')
+        st.markdown(f"**📖 Current Story:** `{session_display}`")
+        st.caption(f"Events: {gen_count} | Characters: {len(current_session.character_manager.roster)}")
+    else:
+        st.markdown("**📖 New Session** (not yet saved)")
+        st.caption("Generate your first event to create a session")
+
+    st.markdown("")  # Spacing
+
+    # Action buttons
+    col1, col2, col3 = st.columns(3)
 
     with col1:
-        if st.button("💾 Save Session", use_container_width=True):
-            try:
-                filepath = st.session_state.session_manager.save()
-                st.success(f"✅ Saved!")
-                st.caption(f"File: {filepath}")
-            except Exception as e:
-                st.error(f"❌ Save failed: {e}")
+        # Save button (only enabled after first generation)
+        if gen_count > 0:
+            if st.button("💾 Save", use_container_width=True, type="primary"):
+                try:
+                    filepath = current_session.save()
+                    st.success("✅ Saved!")
+                    # Extract just filename
+                    filename = Path(filepath).name
+                    st.caption(f"📁 {filename}")
+                except Exception as e:
+                    st.error(f"❌ Save failed: {e}")
+        else:
+            st.button("💾 Save", use_container_width=True, disabled=True, 
+                    help="Generate content first to enable saving")
 
     with col2:
-        if st.button("🔄 New Session", use_container_width=True):
-            # Clear all relevant session state
-            st.session_state.session_manager = SessionManager()
-            st.session_state.current_session_id = st.session_state.session_manager.session_id
+        if st.button("🔄 New", use_container_width=True, help="Start a new story session"):
+            # Prompt to save if unsaved changes
+            if gen_count > 0:
+                st.warning("⚠️ Unsaved changes will be lost!")
+                if st.button("⚠️ Confirm New Session", use_container_width=True, type="secondary"):
+                    st.session_state.session_manager = SessionManager()
+                    st.session_state.current_session_id = st.session_state.session_manager.session_id
+            else:
+                # No content yet, safe to reset
+                st.session_state.session_manager = SessionManager()
+                st.session_state.current_session_id = st.session_state.session_manager.session_id
 
-    # Load existing session
+    with col3:
+        if gen_count > 0:
+            with st.expander("✏️ Rename Session", expanded=False):
+                st.caption("Give your story a custom name for easier identification")
+                
+                current_name = current_session.session_id
+                new_name = st.text_input(
+                    "Session name:",
+                    value=current_name,
+                    max_chars=50,
+                    key="rename_input",
+                    help="Letters, numbers, hyphens, and underscores only"
+                )
+                
+                if st.button("💾 Update Name", key="rename_btn"):
+                    # Validate name
+                    import re
+                    if re.match(r'^[\w\-]+$', new_name) and new_name != current_name:
+                        # Rename session
+                        old_filepath = current_session.sessions_dir / f"{current_name}.json"
+                        
+                        # Update session ID
+                        current_session.session_id = new_name
+                        
+                        # Save with new name
+                        new_filepath = current_session.save()
+                        
+                        # Delete old file
+                        if old_filepath.exists():
+                            old_filepath.unlink()
+                        
+                        st.success(f"✅ Renamed to: {new_name}")
+                        st.session_state.current_session_id = new_name
+                        st.session_state.needs_rerun = True
+
+    # Load existing sessions
+    st.markdown("")  # Spacing
     available_sessions = SessionManager.list_available_sessions()
+
     if available_sessions:
         with st.expander("📂 Load Previous Session", expanded=False):
-            session_options = {
-                f"{s['session_id']} - {s['theme']} ({s['events']} events)": s['session_id'] 
-                for s in available_sessions
-            }
+            # Group sessions by theme for better organization
+            sessions_by_theme = {}
+            for s in available_sessions:
+                theme_key = s['theme'] or 'Untitled'
+                if theme_key not in sessions_by_theme:
+                    sessions_by_theme[theme_key] = []
+                sessions_by_theme[theme_key].append(s)
             
-            selected = st.selectbox(
-                "Select session:",
-                options=list(session_options.keys()),
-                key="session_select"
-            )
+            # Create human-readable session options
+            session_options = {}
+            for theme_key, sessions in sessions_by_theme.items():
+                for s in sessions:
+                    # Extract readable name from session_id
+                    display_name = s['session_id'].replace('_', ' ')
+                    
+                    # Add metadata for context
+                    events = s.get('events', 0)
+                    chars = s.get('characters', 0)
+                    last_mod = s.get('last_modified', '')
+                    
+                    # Parse timestamp
+                    try:
+                        from datetime import datetime
+                        mod_time = datetime.fromisoformat(last_mod)
+                        time_str = mod_time.strftime("%b %d, %H:%M")
+                    except:
+                        time_str = "Unknown"
+                    
+                    # Build display string
+                    option_text = f"📖 {display_name} • {events} events, {chars} chars • {time_str}"
+                    session_options[option_text] = s['session_id']
             
-            if st.button("Load Selected", key="load_btn"):
-                try:
+            if session_options:
+                selected = st.selectbox(
+                    "Choose a session to load:",
+                    options=list(session_options.keys()),
+                    key="session_select",
+                    label_visibility="collapsed"
+                )
+                
+                col_load, col_delete = st.columns([3, 1])
+                
+                with col_load:
+                    if st.button("📂 Load Selected", key="load_btn", use_container_width=True, type="primary"):
+                        try:
+                            session_id = session_options[selected]
+                            st.session_state.session_manager = SessionManager.load(session_id)
+                            st.session_state.current_session_id = session_id
+                            st.success(f"✅ Loaded successfully!")
+                            st.session_state.needs_rerun = True
+                        except Exception as e:
+                            st.error(f"❌ Load failed: {e}")
+                
+                with col_delete:
+                    # Initialize session state for delete confirmation
+                    if 'delete_confirm_id' not in st.session_state:
+                        st.session_state.delete_confirm_id = None
+                    
                     session_id = session_options[selected]
-                    st.session_state.session_manager = SessionManager.load(session_id)
-                    st.session_state.current_session_id = session_id
-                    st.success(f"✅ Loaded: {session_id}")
-                    # Don't call st.rerun() here either
-                except Exception as e:
-                    st.error(f"❌ Load failed: {e}")
-
-    # Display current session info
-    st.caption(f"Current: {st.session_state.current_session_id}")
-    st.caption(f"Events generated: {st.session_state.session_manager.metadata['generation_count']}")
+                    
+                    # First click: Show confirmation state
+                    if st.session_state.delete_confirm_id != session_id:
+                        if st.button("🗑️", key="delete_btn", help="Delete selected session"):
+                            st.session_state.delete_confirm_id = session_id
+                            st.session_state.needs_rerun = True
+                    else:
+                        # Second click: Confirm delete
+                        if st.button("⚠️ Confirm", key="confirm_delete", type="secondary"):
+                            try:
+                                SessionManager.delete_session(session_id)
+                                st.session_state.delete_confirm_id = None  # Reset confirmation
+                                st.success("🗑️ Deleted!")
+                                st.session_state.needs_rerun = True  # Refresh to update list
+                            except Exception as e:
+                                st.error(f"❌ Delete failed: {e}")
+                                st.session_state.delete_confirm_id = None
+            else:
+                st.caption("No saved sessions found")
+    else:
+        st.caption("💡 No saved sessions yet. Generate content and click 'Save' to create one.")
 
     st.divider()
 
@@ -213,36 +340,63 @@ with st.sidebar:
     st.divider()
 
     # ========== Character Configuration ==========
-    st.sidebar.subheader("🎭 Character Configuration")
+    events = st.session_state.session_manager.event_chain.events
+    if len(events) == 0:
+        st.sidebar.subheader("🎭 Character Configuration")
 
-    num_characters = st.sidebar.slider(
-        "Number of Main Characters",
-        min_value=3,
-        max_value=10,
-        value=5,
-        step=1,
-        help="How many major characters will drive your story. These will be tracked throughout the narrative.",
-        key="num_characters_slider"
-    )
+        num_characters = st.sidebar.slider(
+            "Number of Main Characters",
+            min_value=3,
+            max_value=10,
+            value=5,
+            step=1,
+            help="How many major characters will drive your story. These will be tracked throughout the narrative.",
+            key="num_characters_slider"
+        )
 
-    # Optional: Show character distribution hint
-    with st.sidebar.expander("ℹ️ Character Distribution Guide"):
-        st.write(f"""
-        **For {num_characters} characters:**
-        - ~{max(1, num_characters // 3)} Main protagonists
-        - ~{max(1, num_characters // 2)} Supporting characters
-        - ~{max(1, num_characters - (num_characters // 3) - (num_characters // 2))} Minor roles
+        # Optional: Show character distribution hint
+        with st.sidebar.expander("ℹ️ Character Distribution Guide"):
+            st.write(f"""
+            **For {num_characters} characters:**
+            - ~{max(1, num_characters // 3)} Main protagonists
+            - ~{max(1, num_characters // 2)} Supporting characters
+            - ~{max(1, num_characters - (num_characters // 3) - (num_characters // 2))} Minor roles
+            
+            Characters will be automatically tracked and their fates monitored.
+            """)
+
+        # Store in session state for access across reruns
+        if 'num_characters' not in st.session_state:
+            st.session_state.num_characters = num_characters
+        else:
+            st.session_state.num_characters = num_characters
         
-        Characters will be automatically tracked and their fates monitored.
-        """)
-
-    # Store in session state for access across reruns
-    if 'num_characters' not in st.session_state:
-        st.session_state.num_characters = num_characters
+        st.divider()
+            
     else:
-        st.session_state.num_characters = num_characters
-    
-    st.divider()
+        # AFTER FIRST GENERATION: Show locked count with reset option
+        current_count = len(st.session_state.session_manager.character_manager.get_active_characters()) + len(st.session_state.session_manager.character_manager.get_deceased_characters())
+        
+        col1, col2 = st.sidebar.columns([3, 1])
+        
+        with col1:
+            st.metric(
+                label="Character Count",
+                value=current_count,
+                help="Number of main characters in this session"
+            )
+        
+        st.sidebar.caption(f"""
+        🔒 Character count was set during the first generation.
+        
+        **Current roster:**
+        - {len(st.session_state.session_manager.character_manager.get_active_characters())} active
+        - {len(st.session_state.session_manager.character_manager.get_deceased_characters())} deceased
+        
+        Click 🔓 to reset and change character count (⚠️ clears current characters).
+        """)
+        
+        st.divider()
     
     # Custom Input
     st.subheader("✏️ Custom Details")
@@ -579,23 +733,46 @@ with col1:
                         st.error(f"❌ Error saving file: {e}")
 
 with col2:
-        # CHARACTER ROSTER DISPLAY ===
+    # CHARACTER ROSTER DISPLAY ===
     st.header("👥 Character Roster")
-    
+
     active_chars = st.session_state.session_manager.character_manager.get_active_characters()
     deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
-    
+
     if active_chars:
         st.markdown("**Active Characters:**")
-        for char in active_chars:
-            st.markdown(f"- ✅ {char.name} ({char.role})")
+        for char in sorted(active_chars, key=lambda c: c.role):
+            # Role-based emoji
+            role_emoji = {
+                'main': '⭐',
+                'supporting': '✅', 
+                'minor': '○'
+            }.get(char.role, '✅')
+            
+            # Build display string
+            display = f"{role_emoji} **{char.name}** ({char.role})"
+            
+            # Add first appearance
+            display += f" • Introduced: Event {char.first_appearance}"
+            
+            # Add action count
+            if char.notable_actions:
+                display += f" • {len(char.notable_actions)} actions"
+            
+            st.markdown(display)
+            
+            # Show latest action in small text
+            if char.notable_actions:
+                st.caption(f"Latest: {char.notable_actions[-1]}")
     else:
         st.caption("No characters yet")
-    
+
     if deceased_chars:
         st.markdown("**Deceased:**")
         for char in deceased_chars:
-            st.markdown(f"- 💀 {char.name}")
+            st.markdown(f"- 💀 **{char.name}** (Event {char.death_event})")
+            if char.notable_actions:
+                st.caption(f"Cause: {char.notable_actions[-1]}")
     
     st.divider()
     
@@ -604,10 +781,6 @@ with col2:
 
         if result.get('success'):
 
-            # === METADATA & EVALUATION SECTION ===
-            st.markdown("---")
-            st.markdown("## 📊 Metadata & Evaluation")
-
             # === EVENT CHAIN DISPLAY ===
             st.markdown("### 📊 Event Chain")
             
@@ -615,12 +788,23 @@ with col2:
             if events:
                 st.caption(f"Total events in chain: {len(events)}")
                 
-                with st.expander("View Event Summaries", expanded=False):
-                    for event in events:
-                        st.markdown(f"**Event {event.event_number}:**")
+                # Create timeline visualization
+                for i, event in enumerate(events):
+                    with st.expander(f"**Event {event.event_number}**"):
+   
+                        # Event summary
                         st.caption(event.summary if event.summary else "No summary")
+                        
+                        # Characters involved
                         if event.affected_characters:
-                            st.caption(f"Characters: {', '.join(event.affected_characters)}")
+                            char_tags = ' '.join([f"`{c}`" for c in event.affected_characters[:3]])
+                            st.markdown(f"👥 {char_tags}")
+                        
+                        # Hook to next event
+                        if event.hook and i < len(events) - 1:
+                            st.markdown(f"→ *{event.hook}*")
+                    
+                    if i < len(events) - 1:
                         st.markdown("---")
             else:
                 st.caption("No events in chain yet")
@@ -881,6 +1065,10 @@ with col2:
             st.caption(f"{i}. {item['timestamp']} - {item['theme']} ({item['word_count']} words)")
     else:
         st.caption("No generations yet")
+
+if st.session_state.needs_rerun:
+    st.session_state.needs_rerun = False
+    st.rerun
 
 # Footer
 st.divider()

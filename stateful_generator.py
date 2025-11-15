@@ -21,39 +21,43 @@ class StatefulHistoryGenerator:
     
     def _trim_to_word_limit(self, text, max_words=1000, min_words=500):
         """
-        Trim text to word count limits while maintaining sentence integrity
-        This is a safety mechanism in case AI exceeds word count
+        Enhanced trim with better sentence boundary detection
         """
         words = text.split()
         word_count = len(words)
         
-        # If within acceptable range, return as-is
+        # If within range, return as-is
         if min_words <= word_count <= max_words:
             return text
         
-        # If too short, return as-is (let metadata show warning)
+        # If too short, return as-is (can't expand here)
         if word_count < min_words:
             return text
         
-        # If too long, trim to max_words
+        # If too long, trim intelligently
         if word_count > max_words:
-            # Trim to max_words
+            # Strategy: Trim to max_words, then find last complete paragraph
             trimmed_words = words[:max_words]
             trimmed_text = ' '.join(trimmed_words)
             
-            # Find the last complete sentence within limit
-            last_period = trimmed_text.rfind('.')
-            last_exclamation = trimmed_text.rfind('!')
-            last_question = trimmed_text.rfind('?')
+            # Find last paragraph break (double newline)
+            last_para = trimmed_text.rfind('\n\n')
+            if last_para > len(trimmed_text) * 0.85:  # Within 85% of target
+                return trimmed_text[:last_para]
             
-            last_sentence_end = max(last_period, last_exclamation, last_question)
+            # Find last sentence
+            sentence_ends = [
+                trimmed_text.rfind('.'),
+                trimmed_text.rfind('!'),
+                trimmed_text.rfind('?')
+            ]
+            last_sentence = max(sentence_ends)
             
-            # If we found a sentence ending, trim there
-            if last_sentence_end > len(trimmed_text) * 0.8:  # At least 80% through
-                return trimmed_text[:last_sentence_end + 1]
+            if last_sentence > len(trimmed_text) * 0.90:  # Within 90% of target
+                return trimmed_text[:last_sentence + 1]
             
-            # Otherwise, add ellipsis to indicate truncation
-            return trimmed_text.rsplit(' ', 1)[0] + "..."
+            # Fallback: hard cut with ellipsis
+            return ' '.join(words[:max_words-1]) + "..."
         
         return text
     

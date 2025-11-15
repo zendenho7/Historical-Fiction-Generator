@@ -11,8 +11,14 @@ from causal_chain import CausalEventChain
 class SessionManager:
     """Manages persistent sessions with character rosters and event chains"""
     
-    def __init__(self, session_id: Optional[str] = None):
-        self.session_id = session_id or self._generate_session_id()
+    def __init__(self, session_id: Optional[str] = None, theme: str = "", custom_input: str = ""):
+        if session_id:
+            self.session_id = session_id
+        elif theme:  # Generate story-based ID if theme provided
+            self.session_id = self.generate_story_based_id(theme, custom_input)
+        else:  # Fallback to timestamp-based ID
+            self.session_id = self._generate_session_id()
+
         self.character_manager = CharacterManager()
         self.event_chain = CausalEventChain()
         self.metadata = {
@@ -24,7 +30,66 @@ class SessionManager:
         }
         self.sessions_dir = Path('sessions')
         self.sessions_dir.mkdir(exist_ok=True)
-    
+
+    def generate_story_based_id(self, theme: str = "", custom_input: str = "") -> str:
+        """
+        Generate human-readable session ID based on story content
+        Format: "FantasyKingdom_DragonRiders_Nov15_2340"
+        """
+        import re
+        from datetime import datetime
+        
+        # Clean theme for use in filename
+        theme_clean = re.sub(r'[^\w\s-]', '', theme)
+        theme_clean = re.sub(r'[-\s]+', '', theme_clean)  # Remove spaces and hyphens
+        
+        # Extract keywords from custom input (first 2-3 significant words)
+        keywords = []
+        if custom_input:
+            # Remove common words
+            stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 
+                        'by', 'from', 'about', 'and', 'or', 'but', 'is', 'was', 'were'}
+            
+            words = re.findall(r'\b[A-Z][a-z]+\b|\b[a-z]{4,}\b', custom_input)
+            keywords = [w for w in words if w.lower() not in stop_words][:2]
+        
+        # Build ID components
+        theme_part = theme_clean[:20] if theme_clean else "Story"
+        
+        if keywords:
+            keyword_part = ''.join([k.capitalize() for k in keywords])[:15]
+            base_name = f"{theme_part}_{keyword_part}"
+        else:
+            base_name = theme_part
+        
+        # Add timestamp (short format)
+        timestamp = datetime.now().strftime("%b%d_%H%M")
+        
+        # Combine
+        session_id = f"{base_name}_{timestamp}"
+        
+        # Ensure valid filename (remove any remaining special chars)
+        session_id = re.sub(r'[^\w\-]', '', session_id)
+        
+        return session_id
+
+    def set_story_context(self, theme: str, custom_input: str = ""):
+        """
+        Update session ID based on story content (call after first generation)
+        """
+        if not self.metadata.get('theme') or self.metadata.get('generation_count', 0) == 0:
+            # Update session ID with story-based name
+            new_id = self.generate_story_based_id(theme, custom_input)
+            
+            # Rename session file if it already exists
+            old_filepath = self.sessions_dir / f"{self.session_id}.json"
+            if old_filepath.exists():
+                old_filepath.unlink()  # Delete old file
+            
+            self.session_id = new_id
+            self.metadata['theme'] = theme
+            self.metadata['custom_input'] = custom_input
+
     def _generate_session_id(self) -> str:
         """Generate unique session ID"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

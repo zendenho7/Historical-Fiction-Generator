@@ -74,58 +74,77 @@ class CharacterManager:
         self.roster: Dict[str, CharacterState] = {}  # {name: CharacterState}
         self.current_event_num = 0
         self.name_variations = {}  # Handle "King Alaric" vs "Alaric"
-
+    
     def determine_character_role(self, char_name: str, text: str) -> str:
         """
-        Intelligently determine character role from context in text.
+        Intelligently determine character role from context.
         
-        Returns: 'main', 'supporting', or 'minor'
+        ENHANCED with scoring system:
+        - main: High mention count (5+) OR high action count (3+)
+        - supporting: Medium mention (2-4) OR medium action (1-2)
+        - minor: Low mention (1) OR no actions
         """
         import re
         
-        # Convert to lowercase for case-insensitive matching
         text_lower = text.lower()
         char_lower = char_name.lower()
         
         # Count mentions
         mention_count = len(re.findall(r'\b' + re.escape(char_lower) + r'\b', text_lower))
         
-        # Keywords that suggest importance
-        importance_keywords = [
-            # Leadership/Authority
-            r'\b(king|queen|emperor|empress|lord|lady|prince|princess|ruler|sovereign|monarch)\b',
-            r'\b(leader|commander|general|captain|chief)\b',
-            
-            # Actions/Agency
-            r'\b(declared|commanded|ordered|decreed|proclaimed|conquered|defeated|ruled)\b',
-            r'\b(led|founded|established|created|destroyed|killed|assassinated)\b',
-            
-            # Possessives (showing ownership/agency)
-            rf'\b{re.escape(char_lower)}\'s\b',
-            rf'\b{re.escape(char_lower)} (army|forces|kingdom|empire|followers|allies)\b',
+        # High-importance action verbs (indicates main character)
+        main_actions = [
+            r'\b(ruled|reigned|conquered|founded|established|defeated|led|commanded)\b',
+            r'\b(declared|proclaimed|decreed|ordered)\b',
+            r'\b(killed|assassinated|murdered|executed)\b',
         ]
         
-        # Score based on importance indicators
-        importance_score = 0
+        # Medium-importance action verbs (indicates supporting character)
+        supporting_actions = [
+            r'\b(fought|defended|attacked|served|followed|supported)\b',
+            r'\b(married|allied|betrayed|fled|escaped)\b',
+        ]
         
-        for pattern in importance_keywords:
-            # Check if pattern appears near character name (within 50 chars)
+        # Count actions near character name
+        main_action_count = 0
+        supporting_action_count = 0
+        
+        for pattern in main_actions:
+            for match in re.finditer(pattern, text_lower):
+                # Check if character name is within 50 chars
+                char_matches = list(re.finditer(r'\b' + re.escape(char_lower) + r'\b', text_lower))
+                for char_match in char_matches:
+                    distance = abs(match.start() - char_match.start())
+                    if distance < 50:
+                        main_action_count += 1
+                        break
+        
+        for pattern in supporting_actions:
             for match in re.finditer(pattern, text_lower):
                 char_matches = list(re.finditer(r'\b' + re.escape(char_lower) + r'\b', text_lower))
                 for char_match in char_matches:
                     distance = abs(match.start() - char_match.start())
-                    if distance < 50:  # Character mentioned within 50 chars of keyword
-                        importance_score += 1
+                    if distance < 50:
+                        supporting_action_count += 1
                         break
         
-        # Decision logic
-        if mention_count >= 5 or importance_score >= 3:
+        # === CLASSIFICATION LOGIC ===
+        
+        # MAIN character criteria:
+        # - 5+ mentions OR 3+ main actions OR possessive form used
+        has_possessive = f"{char_lower}'s" in text_lower
+        if mention_count >= 5 or main_action_count >= 3 or has_possessive:
             return "main"
-        elif mention_count >= 2 or importance_score >= 1:
+        
+        # SUPPORTING character criteria:
+        # - 2-4 mentions OR 1+ main actions OR 2+ supporting actions
+        elif mention_count >= 2 or main_action_count >= 1 or supporting_action_count >= 2:
             return "supporting"
+        
+        # MINOR character (mentioned but not important)
         else:
             return "minor"
-    
+
     def add_character(self, name: str, role: str = "supporting", event_num: int = None) -> CharacterState:
         """Add a new character to the roster"""
         if event_num is None:
@@ -185,9 +204,20 @@ class CharacterManager:
         """Update current event number"""
         self.current_event_num = event_num
     
-    def extract_characters_from_text(self, text: str) -> List[str]:
-
-        # Expanded exclude list
+    def extract_characters_from_text(self, text: str, max_characters: int = None) -> List[str]:
+        """
+        Enhanced character extraction with better filtering
+        
+        IMPROVEMENTS:
+        1. Excludes geographic locations (countries, cities, regions)
+        2. Excludes species/scientific names
+        3. Requires character titles or contextual verbs
+        4. Prioritizes entities with human actions
+        """
+        
+        # === EXPANDED EXCLUSION LISTS ===
+        
+        # Common words to always exclude
         exclude_words = {
             'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
             'of', 'with', 'by', 'from', 'as', 'is', 'was', 'were', 'been', 'be',
@@ -198,35 +228,96 @@ class CharacterManager:
             'age', 'era', 'period', 'century', 'centuries', 'ae'
         }
         
-        # Event/location indicators to exclude
-        non_character_indicators = {
-            'kingdom', 'city', 'town', 'village', 'forest', 'mountain', 'river',
-            'valley', 'plain', 'desert', 'ocean', 'sea', 'lake', 'island',
-            'castle', 'fortress', 'temple', 'woods', 'peak', 'peaks', 'creek', 'hills',
-            'battle', 'war', 'treaty', 'pact', 'alliance', 'rebellion', 'revolt',
-            'fire', 'plague', 'rot', 'disease', 'catastrophe', 'disaster',
-            'throne', 'crown', 'order', 'codex', 'blade', 'sword', 'weapon',
-            'founding', 'expansion', 'turmoil', 'rebirth', 'collapse',
-            'age of', 'era of', 'year', 'dragon throne', 'chronicle'
+        # Geographic indicators (places, not people)
+        geographic_indicators = {
+            # Regions/Landforms
+            'peninsula', 'island', 'continent', 'region', 'territory', 'land',
+            'kingdom', 'empire', 'nation', 'country', 'state', 'province',
+            'city', 'town', 'village', 'settlement', 'outpost',
+            'forest', 'jungle', 'woods', 'wilderness',
+            'mountain', 'mountains', 'peak', 'peaks', 'hills', 'highlands',
+            'river', 'creek', 'stream', 'lake', 'sea', 'ocean', 'bay', 'gulf',
+            'valley', 'plain', 'plains', 'desert', 'wasteland', 'tundra',
+            'coast', 'shore', 'beach', 'cliff', 'canyon', 'gorge',
+            
+            # Structures (buildings/fortifications)
+            'castle', 'fortress', 'fort', 'citadel', 'stronghold',
+            'temple', 'cathedral', 'shrine', 'monastery', 'abbey',
+            'palace', 'manor', 'estate', 'tower', 'keep',
+            'gate', 'gates', 'wall', 'walls', 'bridge',
+            
+            # Specific well-known places
+            'arabia', 'arabian', 'saudi', 'africa', 'asia', 'europe',
+            'america', 'antarctica', 'australia', 'pacific', 'atlantic',
+            'mediterranean', 'sahara', 'gobi', 'arctic', 'antarctic'
         }
         
-        # Character title indicators (these suggest it's a person)
+        # Scientific/species indicators (biology terms)
+        scientific_indicators = {
+            'gryllus', 'arenarius', 'sapiens', 'domesticus',  # Latin binomials
+            'species', 'genus', 'family', 'order', 'class',
+            'insect', 'cricket', 'beetle', 'spider', 'ant',
+            'mammal', 'reptile', 'bird', 'fish', 'amphibian'
+        }
+        
+        # Abstract concepts/events (not people)
+        abstract_concepts = {
+            'hope', 'faith', 'courage', 'wisdom', 'justice', 'freedom',
+            'peace', 'war', 'battle', 'conflict', 'alliance', 'treaty',
+            'rebellion', 'revolution', 'uprising', 'coup',
+            'founding', 'establishment', 'creation', 'destruction',
+            'expansion', 'contraction', 'growth', 'decline',
+            'sands', 'shifting', 'eternal', 'ancient', 'sacred'
+        }
+        
+        # Character titles (these MUST accompany a name to be valid)
         character_titles = {
-            'king', 'queen', 'prince', 'princess', 'lord', 'lady', 'sir',
-            'emperor', 'empress', 'duke', 'duchess', 'count', 'countess',
-            'baron', 'baroness', 'knight', 'general', 'captain', 'commander'
+            'king', 'queen', 'emperor', 'empress', 'sultan', 'caliph',
+            'prince', 'princess', 'duke', 'duchess', 'lord', 'lady',
+            'count', 'countess', 'baron', 'baroness',
+            'sir', 'dame', 'knight',
+            'general', 'commander', 'captain', 'admiral', 'colonel',
+            'chief', 'chieftain', 'elder', 'shaman', 'priest', 'bishop',
+            'prophet', 'sage', 'wizard', 'mage', 'sorcerer',
+            'master', 'mistress', 'doctor', 'professor'
         }
         
-        # Find capitalized words (potential names)
+        # Human action verbs (verbs that indicate a PERSON acting)
+        human_action_verbs = {
+            # Leadership actions
+            'ruled', 'reigned', 'governed', 'commanded', 'led', 'directed',
+            'declared', 'decreed', 'proclaimed', 'announced', 'ordered',
+            
+            # Physical actions
+            'killed', 'murdered', 'assassinated', 'executed', 'slew', 'defeated',
+            'conquered', 'invaded', 'attacked', 'defended', 'fought', 'battled',
+            'fled', 'escaped', 'retreated', 'advanced', 'marched',
+            
+            # Social actions
+            'married', 'wed', 'divorced', 'betrothed', 'courted',
+            'befriended', 'betrayed', 'allied', 'conspired', 'plotted',
+            
+            # Mental actions
+            'decided', 'chose', 'planned', 'schemed', 'thought', 'believed',
+            'knew', 'learned', 'discovered', 'realized', 'understood',
+            
+            # Speech actions
+            'said', 'spoke', 'declared', 'whispered', 'shouted', 'claimed',
+            'argued', 'debated', 'negotiated', 'promised', 'vowed'
+        }
+        
+        # === EXTRACTION LOGIC ===
+        
+        # Split into sentences
         sentences = re.split(r'[.!?]+', text)
-        potential_names = set()
+        potential_characters = {}  # {name: score}
         
         for sentence in sentences:
             words = sentence.strip().split()
             
             i = 0
             while i < len(words):
-                # Skip first word of sentence
+                # Skip first word of sentence (often capitalized for grammar)
                 if i == 0:
                     i += 1
                     continue
@@ -243,14 +334,15 @@ class CharacterManager:
                     i += 1
                     continue
                 
-                # Check for multi-word names (up to 3 words)
+                # === BUILD MULTI-WORD NAME ===
                 name_parts = [clean_word]
                 j = i + 1
                 
-                # Look ahead for title + name pattern (e.g., "King Theron")
+                # Check if first word is a title
                 has_title = clean_word.lower() in character_titles
                 
-                while j < len(words) and j < i + 3:
+                # Look ahead for additional capitalized words
+                while j < len(words) and j < i + 4:  # Max 4 words
                     next_word = words[j].strip('.,;:!?"\'()[]{}*')
                     
                     if not next_word or not next_word[0].isupper():
@@ -265,36 +357,92 @@ class CharacterManager:
                 full_name = ' '.join(name_parts)
                 full_name_lower = full_name.lower()
                 
-                # Filter out non-characters
-                is_non_character = False
+                # === FILTERING LOGIC ===
                 
-                # Check if contains non-character indicators
-                for indicator in non_character_indicators:
-                    if indicator in full_name_lower:
-                        is_non_character = True
-                        break
+                # 1. REJECT: Geographic terms
+                if any(geo in full_name_lower for geo in geographic_indicators):
+                    i = j if j > i + 1 else i + 1
+                    continue
                 
-                # Check if it's just a title without a name
+                # 2. REJECT: Scientific terms
+                if any(sci in full_name_lower for sci in scientific_indicators):
+                    i = j if j > i + 1 else i + 1
+                    continue
+                
+                # 3. REJECT: Abstract concepts
+                if any(concept in full_name_lower for concept in abstract_concepts):
+                    i = j if j > i + 1 else i + 1
+                    continue
+                
+                # 4. REJECT: Just a title without a name
                 if len(name_parts) == 1 and name_parts[0].lower() in character_titles:
-                    is_non_character = True
+                    i = j if j > i + 1 else i + 1
+                    continue
                 
-                # Check for date markers (e.g., "AE:**")
+                # 5. REJECT: Date markers (e.g., "AE", "Year")
                 if ':' in full_name or '*' in full_name or ')' in full_name:
-                    is_non_character = True
+                    i = j if j > i + 1 else i + 1
+                    continue
                 
-                # Must be 2-4 words if it includes a title
-                if has_title and len(name_parts) < 2:
-                    is_non_character = True
+                # === SCORING SYSTEM (to prioritize likely characters) ===
+                score = 0
                 
-                # Add if valid
-                if not is_non_character and len(full_name) >= 3:
-                    # Only add names with titles OR 2-word names
-                    if has_title or len(name_parts) >= 2:
-                        potential_names.add(full_name)
+                # +3 points: Has a character title
+                if has_title:
+                    score += 3
+                
+                # +2 points: Multiple words (e.g., "King Aldric" vs "Arabia")
+                if len(name_parts) >= 2:
+                    score += 2
+                
+                # +2 points: Appears near human action verbs
+                sentence_lower = sentence.lower()
+                for verb in human_action_verbs:
+                    if verb in sentence_lower:
+                        # Check proximity (within 30 characters)
+                        name_pos = sentence_lower.find(full_name_lower)
+                        verb_pos = sentence_lower.find(verb)
+                        if name_pos >= 0 and verb_pos >= 0:
+                            distance = abs(name_pos - verb_pos)
+                            if distance < 30:
+                                score += 2
+                                break
+                
+                # +1 point: Has possessive form ("'s")
+                if f"{full_name_lower}'s" in sentence_lower:
+                    score += 1
+                
+                # +1 point: Mentioned multiple times in text
+                mention_count = text.lower().count(full_name_lower)
+                if mention_count >= 2:
+                    score += 1
+                if mention_count >= 4:
+                    score += 1
+                
+                # === ACCEPT if score >= 3 ===
+                if score >= 3 and len(full_name) >= 3:
+                    if full_name not in potential_characters:
+                        potential_characters[full_name] = score
+                    else:
+                        potential_characters[full_name] += score
                 
                 i = j if j > i + 1 else i + 1
         
-        return list(potential_names)[:20]  # Limit to 20 characters
+        # === SORT BY SCORE AND RETURN ===
+        sorted_characters = sorted(
+            potential_characters.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        
+        character_names = [name for name, score in sorted_characters]
+        
+        # Apply max_characters limit
+        if max_characters and len(character_names) > max_characters:
+            character_names = character_names[:max_characters]
+        
+        # Limit to 20 if no max specified
+        return character_names[:20] if not max_characters else character_names
     
     def validate_character_usage(self, text: str) -> tuple[bool, List[str]]:
         """

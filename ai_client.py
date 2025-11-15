@@ -141,7 +141,9 @@ class HistoricalFictionGenerator:
             # Extract and track characters from generated text
             # ONLY if this is the first event (to establish roster)
             if current_event == 1:
-                extracted_chars = session_manager.character_manager.extract_characters_from_text(content)
+                # Set story-based session ID on first generation
+                session_manager.set_story_context(theme, custom_input)
+                extracted_chars = session_manager.character_manager.extract_characters_from_text(content, max_characters=num_characters)
                 for char_name in extracted_chars:
                     if not session_manager.character_manager.get_character(char_name):
                         # Intelligently determine role based on context

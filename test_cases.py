@@ -221,3 +221,25 @@ QUICK_TEST_CASES = [
         "use_multi_stage": True
     },
 ]
+
+# Edge case tests
+EDGE_CASE_TESTS = [
+    {
+        'theme': 'Fantasy Kingdom',
+        'custom_input': 'Focus on character deaths and succession',
+        'time_span': 'epic',
+        'event_density': 'rich',
+        'narrative_focus': 'personal',
+        'use_multi_stage': True,
+        'num_characters': 10  # Test maximum
+    },
+    {
+        'theme': 'Alien Planet',
+        'custom_input': 'Multiple character deaths and revivals',
+        'time_span': 'moderate',
+        'event_density': 'moderate',
+        'narrative_focus': 'political',
+        'use_multi_stage': True,
+        'num_characters': 3  # Test minimum
+    }
+]
