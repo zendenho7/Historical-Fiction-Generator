@@ -149,6 +149,12 @@ with st.sidebar:
     # === SESSION CONTROLS ===
     st.subheader("💾 Session Management")
 
+    # Initialize flags (at top of script, only once)
+    if 'pending_action' not in st.session_state:
+        st.session_state.pending_action = None
+    if 'confirm_new_session' not in st.session_state:
+        st.session_state.confirm_new_session = False
+
     # Get current session info for display
     current_session = st.session_state.session_manager
     gen_count = current_session.metadata.get('generation_count', 0)
@@ -186,17 +192,28 @@ with st.sidebar:
                     help="Generate content first to enable saving")
 
     with col2:
-        if st.button("🔄 New", use_container_width=True, help="Start a new story session"):
-            # Prompt to save if unsaved changes
-            if gen_count > 0:
-                st.warning("⚠️ Unsaved changes will be lost!")
-                if st.button("⚠️ Confirm New Session", use_container_width=True, type="secondary"):
-                    st.session_state.session_manager = SessionManager()
-                    st.session_state.current_session_id = st.session_state.session_manager.session_id
-            else:
-                # No content yet, safe to reset
+  
+        # Check if we're in confirmation state
+        if st.session_state.confirm_new_session:
+            # Show confirmation button
+            if st.button("⚠️ Confirm New", use_container_width=True, type="secondary", key="confirm_new_btn"):
+                # Create new session
                 st.session_state.session_manager = SessionManager()
                 st.session_state.current_session_id = st.session_state.session_manager.session_id
+                st.session_state.confirm_new_session = False  # Reset flag
+                st.session_state.pending_action = 'new'
+        else:
+            # Show normal new button
+            if st.button("🔄 New", use_container_width=True, key="new_btn", help="Start new session"):
+                if gen_count > 0:
+                    # Has content - need confirmation
+                    st.session_state.confirm_new_session = True
+                    st.session_state.pending_action = 'new_confirm'  # Trigger rerun to show confirm button
+                else:
+                    # No content - safe to reset immediately
+                    st.session_state.session_manager = SessionManager()
+                    st.session_state.current_session_id = st.session_state.session_manager.session_id
+                    st.session_state.pending_action = 'new'
 
     with col3:
         if gen_count > 0:
@@ -232,6 +249,10 @@ with st.sidebar:
                         st.success(f"✅ Renamed to: {new_name}")
                         st.session_state.current_session_id = new_name
                         st.session_state.needs_rerun = True
+
+    # Show warning message if in confirmation state
+    if st.session_state.confirm_new_session:
+        st.warning("⚠️ **Unsaved changes will be lost!** Click '⚠️ Confirm New' to proceed, or click elsewhere to cancel.")
 
     # Load existing sessions
     st.markdown("")  # Spacing
@@ -398,15 +419,72 @@ with st.sidebar:
         
         st.divider()
     
-    # Custom Input
+    # Custom Input WITH VALIDATION
     st.subheader("✏️ Custom Details")
+
+    # Initialize validation state
+    if 'input_validation_warnings' not in st.session_state:
+        st.session_state.input_validation_warnings = []
+
     custom_input = st.text_area(
         "Enter specific details (optional):",
         height=100,
+        max_chars=500,  # Hard limit at UI level
         placeholder="e.g., A kingdom built inside a massive tree, ruled by dragon riders...",
-        help="Provide specific context, characters, places, or events to incorporate"
+        help="Provide specific context, characters, places, or events to incorporate (max 500 characters)",
+        key="custom_input_field"
     )
+
+    # Real-time validation
+    if custom_input:
+        from input_validator import InputValidator
+        
+        is_valid, error_msg, warnings = InputValidator.validate(custom_input)
+        
+        # Show character count
+        char_count = len(custom_input)
+        char_color = "green" if char_count <= 400 else "orange" if char_count <= 500 else "red"
+        st.caption(f":{char_color}[{char_count}/500 characters]")
+        
+        # Show validation status
+        if not is_valid:
+            st.error(f"❌ {error_msg}")
+            st.caption("Please revise your input before generating.")
+        elif warnings:
+            st.warning(f"⚠️ Warnings: {', '.join(warnings)}")
+            st.caption("Your input is accepted but may produce unexpected results.")
+        else:
+            st.success("✅ Input validated successfully!")
     
+    st.divider()
+
+    # === PERSONA SELECTION ===
+    with st.expander("🎭 Narrative Persona Settings", expanded=False):
+        st.markdown("""
+        **Persona controls how the AI writes your story:**
+        - Pacing and flow
+        - Emotional depth
+        - Continuity style
+        - Transition smoothness
+        """)
+        
+        from config import Config
+        
+        persona_options = list(Config.PERSONA_PRESETS.keys())
+        selected_persona = st.selectbox(
+            "Choose narrative style:",
+            options=persona_options,
+            index=0,  # Default to "Smooth Storyteller"
+            key="persona_select"
+        )
+        
+        # Show persona description
+        persona_info = Config.PERSONA_PRESETS[selected_persona]
+        st.info(f"**{selected_persona}:** {persona_info['description']}")
+        
+        # Store in session state
+        st.session_state.selected_persona = selected_persona
+
     st.divider()
     
     # === GENERATION PARAMETERS (ENHANCED WITH TOOLTIPS) ===
@@ -640,6 +718,17 @@ with col1:
     st.header("📖 Generated Content")
     
     if generate_button:
+        # validation check
+        if custom_input:
+            is_valid, error_msg, warnings = InputValidator.validate(custom_input)
+            
+            if not is_valid:
+                st.error(f"❌ {error_msg}")
+                st.stop()  # Block generation
+            elif warnings:
+                st.warning(f"⚠️ {'; '.join(warnings)}")
+
+
         with st.spinner("🔄 Generating chronology..."):
             try:
                 result = st.session_state.generator.generate(
@@ -650,7 +739,8 @@ with col1:
                     narrative_focus=narrative_focus_value,
                     use_multi_stage=use_multistage,
                     session_manager=st.session_state.session_manager,
-                    num_characters=st.session_state.num_characters
+                    num_characters=st.session_state.num_characters,
+                    persona_name=st.session_state.get('selected_persona', 'Smooth Storyteller')
                 )
                 
                 # Store in session state
@@ -739,6 +829,32 @@ with col2:
     active_chars = st.session_state.session_manager.character_manager.get_active_characters()
     deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
 
+    # === CHARACTER COUNT VALIDATION ===
+    if active_chars or deceased_chars:
+        target_count = st.session_state.get('num_characters', 5)
+        actual_count = len(active_chars) + len(deceased_chars)
+
+        # Show summary with validation
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Target Characters", target_count, help="Set before first generation")
+
+        with col2:
+            delta = actual_count - target_count
+            delta_text = f"{delta:+d}" if delta != 0 else "Perfect"
+            delta_color = "off" if delta == 0 else "inverse"
+            
+            st.metric("Actual Characters", actual_count, delta=delta_text, delta_color=delta_color)
+
+        with col3:
+            if actual_count == target_count:
+                st.success("✅ Count matches!")
+            elif actual_count < target_count:
+                st.warning(f"⚠️ {target_count - actual_count} missing")
+            else:
+                st.error(f"❌ {actual_count - target_count} extra")
+
     if active_chars:
         st.markdown("**Active Characters:**")
         for char in sorted(active_chars, key=lambda c: c.role):
@@ -810,7 +926,7 @@ with col2:
                 st.caption("No events in chain yet")
             
             st.divider()
-            
+     
             # === QUALITY METRICS WITH COLOR CODING ===
             st.markdown("### 📈 Quality Metrics")
             
@@ -890,100 +1006,11 @@ with col2:
                     st.markdown(":blue[✨ Multi-stage pipeline]")
                 else:
                     st.markdown(":gray[⚡ Single-stage]")
-            
-            # === QUALITY SCORE CALCULATION ===
-            st.markdown("---")
-            st.markdown("### 🎯 Quality Assessment")
-            
-            # Calculate overall quality score
-            quality_scores = {}
-            
-            # 1. Word Count Score (40 points max)
-            if 500 <= word_count <= 1000:
-                word_score = 40
-            elif 1000 < word_count <= 1100 or 450 <= word_count < 500:
-                word_score = 30
-            elif 1100 < word_count <= 1200 or 400 <= word_count < 450:
-                word_score = 20
-            else:
-                word_score = 10
-            quality_scores['Word Count Compliance'] = word_score
-            
-            # 2. Entity Tracking Score (30 points max)
-            entities = result.get('entities_tracked', {})
-            char_count = len(entities.get('characters', []))
-            place_count = len(entities.get('places', []))
-            
-            if char_count >= 3 and place_count >= 2:
-                entity_score = 30
-            elif char_count >= 2 or place_count >= 1:
-                entity_score = 20
-            else:
-                entity_score = 10
-            quality_scores['Entity Consistency'] = entity_score
-            
-            # 3. Generation Method Score (30 points max)
-            if params.get('multi_stage'):
-                method_score = 30
-            else:
-                method_score = 15
-            quality_scores['Generation Quality'] = method_score
-            
-            # Calculate total score
-            total_score = sum(quality_scores.values())
-            max_score = 100
-            
-            # Display quality score with color coding
-            score_col1, score_col2 = st.columns([2, 3])
-            
-            with score_col1:
-                # Overall score with color
-                if total_score >= 90:
-                    score_color = "green"
-                    score_label = "Excellent"
-                    score_emoji = "🏆"
-                elif total_score >= 75:
-                    score_color = "blue"
-                    score_label = "Good"
-                    score_emoji = "✅"
-                elif total_score >= 60:
-                    score_color = "orange"
-                    score_label = "Fair"
-                    score_emoji = "⚠️"
-                else:
-                    score_color = "red"
-                    score_label = "Needs Improvement"
-                    score_emoji = "❌"
-                
-                st.markdown(f"### :{score_color}[{score_emoji} Overall Score: {total_score}/100]")
-                st.markdown(f"**Quality Grade:** :{score_color}[{score_label}]")
-                
-                # Progress bar for overall score
-                st.progress(total_score / 100)
-            
-            with score_col2:
                 st.markdown("#### Score Breakdown")
-                
-                # Display individual scores
-                for category, score in quality_scores.items():
-                    max_category_score = 40 if 'Word' in category else 30
-                    percentage = (score / max_category_score) * 100
-                    
-                    if percentage >= 80:
-                        icon = "✅"
-                        color = "green"
-                    elif percentage >= 60:
-                        icon = "⚠️"
-                        color = "orange"
-                    else:
-                        icon = "❌"
-                        color = "red"
-                    
-                    st.markdown(f":{color}[{icon} **{category}:** {score}/{max_category_score} ({int(percentage)}%)]")
-    
+            
             # === GENERATION STAGES (if multi-stage was used) ===
             if result.get('stages'):
-                st.markdown("---")
+                st.divider()
                 with st.expander("🔄 Generation Stages (Multi-Stage Pipeline)", expanded=False):
                     stages_data = result['stages']
 
@@ -1057,8 +1084,9 @@ with col2:
                     else:
                         st.warning("⚠️ Stages data format not recognized")
     
+            st.divider()
+
     # === GENERATION HISTORY ===
-    st.divider()
     st.subheader("📜 Generation History")
     if st.session_state.generation_history:
         for i, item in enumerate(reversed(st.session_state.generation_history[-5:]), 1):

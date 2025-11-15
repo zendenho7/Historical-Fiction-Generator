@@ -7,7 +7,7 @@ import csv
 from datetime import datetime
 from pathlib import Path
 from ai_client import HistoricalFictionGenerator
-from test_cases import TEST_CASES, QUICK_TEST_CASES
+from test_cases import TEST_CASES, QUICK_TEST_CASES, EDGE_CASE_TESTS
 from config import Config
 
 class TestRunner:
@@ -178,7 +178,7 @@ class TestRunner:
                 f.write(f"Tokens Used: {result.get('tokens_used', 'N/A')}\n")
                 f.write(f"Timestamp: {result['timestamp']}\n")
                 
-                # NEW: Write enhanced parameters
+                # Enhanced parameters
                 if 'parameters' in result:
                     params = result['parameters']
                     f.write(f"\nGeneration Parameters:\n")
@@ -187,7 +187,7 @@ class TestRunner:
                     f.write(f"  - Narrative Focus: {params.get('narrative_focus', 'N/A')}\n")
                     f.write(f"  - Multi-Stage: {params.get('multi_stage', 'N/A')}\n")
                 
-                # NEW: Write tracked entities
+                # Tracked entities
                 if 'entities_tracked' in result and result['entities_tracked']:
                     f.write(f"\nTracked Entities:\n")
                     entities = result['entities_tracked']
@@ -200,14 +200,41 @@ class TestRunner:
                     if entities.get('factions'):
                         f.write(f"  - Factions: {', '.join(entities['factions'])}\n")
                 
-                # NEW: Write stage information
+                # === FIXED: Handle both dict and list formats for stages ===
                 if 'stages' in result and result['stages']:
                     f.write(f"\nGeneration Stages:\n")
-                    for stage in result['stages']:
-                        f.write(f"  - Stage {stage['stage']}: {stage['word_count']} words")
-                        if 'entities_found' in stage:
-                            f.write(f" (Found {len(stage['entities_found'])} entities)")
-                        f.write("\n")
+                    stages_data = result['stages']
+                    
+                    # Handle dictionary format (new format)
+                    if isinstance(stages_data, dict):
+                        stage1_words = stages_data.get('stage1_word_count', 0)
+                        stage2_words = stages_data.get('stage2_word_count', 0)
+                        
+                        f.write(f"  - Stage 1 (Skeleton): {stage1_words} words\n")
+                        f.write(f"  - Stage 2 (Refined): {stage2_words} words\n")
+                        
+                        if stage1_words and stage2_words:
+                            word_diff = stage2_words - stage1_words
+                            f.write(f"  - Expansion: {word_diff:+d} words ({(word_diff/stage1_words*100):.1f}%)\n")
+                        
+                        if stages_data.get('stage1_preview'):
+                            f.write(f"\n  Stage 1 Preview (first 200 chars):\n")
+                            preview = stages_data['stage1_preview'][:200]
+                            f.write(f"  {preview}...\n")
+                    
+                    # Handle list format (old format - backward compatibility)
+                    elif isinstance(stages_data, list):
+                        for stage in stages_data:
+                            if isinstance(stage, dict):
+                                stage_num = stage.get('stage', '?')
+                                word_count = stage.get('word_count', 'N/A')
+                                f.write(f"  - Stage {stage_num}: {word_count} words")
+                                
+                                if 'entities_found' in stage:
+                                    f.write(f" (Found {len(stage['entities_found'])} entities)")
+                                f.write("\n")
+                    else:
+                        f.write(f"  - Format: {type(stages_data).__name__} (unexpected)\n")
                 
                 if result.get('error'):
                     f.write(f"\nError: {result['error']}\n")
@@ -269,6 +296,9 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == '--quick':
         print("Running QUICK test suite (enhanced parameters)...")
         runner.run_tests(QUICK_TEST_CASES, "quick_test")
+    elif len(sys.argv) > 1 and sys.argv[1] == '--edge':
+        print("Running QUICK test suite (enhanced parameters)...")
+        runner.run_tests(EDGE_CASE_TESTS, "edge_test")
     else:
         print("Running FULL test suite (enhanced parameters)...")
         print("(Use --quick flag for faster testing with fewer cases)")

@@ -52,7 +52,8 @@ class HistoricalFictionGenerator:
         
     def generate(self, theme, custom_input="", time_span="moderate",
                 event_density="moderate", narrative_focus="political",
-                use_multi_stage=True, session_manager=None, num_characters=5):
+                use_multi_stage=True, session_manager=None, num_characters=5,
+                persona_name="Smooth Storyteller"):
         """
         Generate with ALL course concepts applied + NEW session integration
         """
@@ -78,6 +79,12 @@ class HistoricalFictionGenerator:
                     next_event_number=current_event,
                     character_roster=character_roster_summary
                 )
+
+            # Get persona instructions
+            from config import Config
+            persona_config = Config.PERSONA_PRESETS.get(persona_name, Config.PERSONA_PRESETS[Config.DEFAULT_PERSONA])
+            persona_instructions = persona_config['instructions']
+            persona_temperature = persona_config['temperature']
             
             # TECHNIQUE 1: Grammar-based prompt construction WITH character/causal context
             base_prompt = PromptGrammar.build_prompt(
@@ -89,14 +96,25 @@ class HistoricalFictionGenerator:
                 word_range=f"{Config.MIN_WORDS}-{Config.MAX_WORDS} words",
                 character_roster_summary=character_roster_summary,
                 causal_context=causal_context,
-                num_characters=num_characters
+                num_characters=num_characters,
+                persona_instructions=persona_instructions
             )
 
-            import streamlit as st
+            def is_streamlit_available():
+                """Check if Streamlit is available and in active context"""
+                try:
+                    import streamlit as st
+                    from streamlit.runtime.scriptrunner import get_script_run_ctx
+                    return get_script_run_ctx() is not None
+                except:
+                    return False
 
-            # Display in Streamlit
-            with st.expander("🐛 DEBUG: View Generated Prompt", expanded=False):
-                st.code(base_prompt, language="text")
+            # Then in your code:
+            if session_manager:
+                if is_streamlit_available():
+                    import streamlit as st
+                    with st.expander("🐛 DEBUG: View Generated Prompt", expanded=False):
+                        st.code(base_prompt, language="text")
             
             # TECHNIQUE 2 & 3: Multi-stage pipeline with state tracking
             if use_multi_stage:
@@ -106,7 +124,7 @@ class HistoricalFictionGenerator:
                     theme=theme,
                     custom_input=custom_input,
                     stages=2,
-                    temperature=Config.TEMPERATURE,
+                    temperature=persona_temperature,
                     max_tokens=Config.MAX_TOKENS,
                     session_manager=session_manager  # Pass session manager
                 )

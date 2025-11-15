@@ -79,66 +79,82 @@ class CharacterManager:
         """
         Intelligently determine character role from context.
         
-        ENHANCED with scoring system:
-        - main: High mention count (5+) OR high action count (3+)
-        - supporting: Medium mention (2-4) OR medium action (1-2)
-        - minor: Low mention (1) OR no actions
+        ENHANCED with:
+        - Mention count threshold
+        - Action verb proximity
+        - Title presence
+        - Possessive usage
         """
         import re
         
         text_lower = text.lower()
         char_lower = char_name.lower()
         
-        # Count mentions
-        mention_count = len(re.findall(r'\b' + re.escape(char_lower) + r'\b', text_lower))
+        # Count mentions (case-insensitive word boundary)
+        mention_pattern = r'\b' + re.escape(char_lower) + r'\b'
+        mention_count = len(re.findall(mention_pattern, text_lower))
         
-        # High-importance action verbs (indicates main character)
+        # Check for title usage (e.g., "Queen Lyra", "King Aldric")
+        has_title = any(title in char_name.lower() for title in [
+            'king', 'queen', 'emperor', 'empress', 'prince', 'princess',
+            'lord', 'lady', 'sir', 'dame', 'general', 'commander'
+        ])
+        
+        # Check for possessive usage (indicates importance)
+        has_possessive = f"{char_lower}'s" in text_lower
+        
+        # High-importance action verbs (indicates MAIN character)
         main_actions = [
-            r'\b(ruled|reigned|conquered|founded|established|defeated|led|commanded)\b',
-            r'\b(declared|proclaimed|decreed|ordered)\b',
-            r'\b(killed|assassinated|murdered|executed)\b',
+            r'\b(ruled|reigned|conquered|founded|established|created)\b',
+            r'\b(declared|proclaimed|decreed|ordered|commanded)\b',
+            r'\b(killed|assassinated|defeated|destroyed)\b',
+            r'\b(led|guided|united|liberated|saved)\b',
         ]
         
-        # Medium-importance action verbs (indicates supporting character)
+        # Medium-importance action verbs (indicates SUPPORTING character)
         supporting_actions = [
-            r'\b(fought|defended|attacked|served|followed|supported)\b',
+            r'\b(fought|defended|attacked|battled|served)\b',
+            r'\b(discovered|found|uncovered|revealed)\b',
             r'\b(married|allied|betrayed|fled|escaped)\b',
+            r'\b(built|constructed|forged|crafted)\b',
         ]
         
         # Count actions near character name
         main_action_count = 0
         supporting_action_count = 0
         
+        # Search for character name followed by action within 50 characters
         for pattern in main_actions:
-            for match in re.finditer(pattern, text_lower):
-                # Check if character name is within 50 chars
-                char_matches = list(re.finditer(r'\b' + re.escape(char_lower) + r'\b', text_lower))
-                for char_match in char_matches:
-                    distance = abs(match.start() - char_match.start())
-                    if distance < 50:
-                        main_action_count += 1
-                        break
+            for char_match in re.finditer(mention_pattern, text_lower):
+                char_pos = char_match.start()
+                # Look 50 chars before and after
+                context = text_lower[max(0, char_pos-50):min(len(text_lower), char_pos+50)]
+                if re.search(pattern, context):
+                    main_action_count += 1
         
         for pattern in supporting_actions:
-            for match in re.finditer(pattern, text_lower):
-                char_matches = list(re.finditer(r'\b' + re.escape(char_lower) + r'\b', text_lower))
-                for char_match in char_matches:
-                    distance = abs(match.start() - char_match.start())
-                    if distance < 50:
-                        supporting_action_count += 1
-                        break
+            for char_match in re.finditer(mention_pattern, text_lower):
+                char_pos = char_match.start()
+                context = text_lower[max(0, char_pos-50):min(len(text_lower), char_pos+50)]
+                if re.search(pattern, context):
+                    supporting_action_count += 1
         
         # === CLASSIFICATION LOGIC ===
         
         # MAIN character criteria:
-        # - 5+ mentions OR 3+ main actions OR possessive form used
-        has_possessive = f"{char_lower}'s" in text_lower
-        if mention_count >= 5 or main_action_count >= 3 or has_possessive:
+        # - 5+ mentions OR 3+ main actions OR has title + possessive
+        if (mention_count >= 5 or 
+            main_action_count >= 3 or 
+            (has_title and has_possessive) or
+            (has_title and mention_count >= 3)):
             return "main"
         
         # SUPPORTING character criteria:
         # - 2-4 mentions OR 1+ main actions OR 2+ supporting actions
-        elif mention_count >= 2 or main_action_count >= 1 or supporting_action_count >= 2:
+        elif (mention_count >= 2 or 
+            main_action_count >= 1 or 
+            supporting_action_count >= 2 or
+            has_possessive):
             return "supporting"
         
         # MINOR character (mentioned but not important)
@@ -228,13 +244,15 @@ class CharacterManager:
             'age', 'era', 'period', 'century', 'centuries', 'ae'
         }
         
-        # Geographic indicators (places, not people)
         geographic_indicators = {
             # Regions/Landforms
             'peninsula', 'island', 'continent', 'region', 'territory', 'land',
             'kingdom', 'empire', 'nation', 'country', 'state', 'province',
             'city', 'town', 'village', 'settlement', 'outpost',
-            'forest', 'jungle', 'woods', 'wilderness',
+            
+            # Natural features (ADD THESE - fixes "Elder Tree" issue)
+            'forest', 'jungle', 'woods', 'wilderness', 'grove',
+            'tree', 'trees',  # CRITICAL FIX
             'mountain', 'mountains', 'peak', 'peaks', 'hills', 'highlands',
             'river', 'creek', 'stream', 'lake', 'sea', 'ocean', 'bay', 'gulf',
             'valley', 'plain', 'plains', 'desert', 'wasteland', 'tundra',
@@ -245,13 +263,15 @@ class CharacterManager:
             'temple', 'cathedral', 'shrine', 'monastery', 'abbey',
             'palace', 'manor', 'estate', 'tower', 'keep',
             'gate', 'gates', 'wall', 'walls', 'bridge',
+            'galleries', 'gallery', 'citadel',  # ADD for your story context
             
             # Specific well-known places
             'arabia', 'arabian', 'saudi', 'africa', 'asia', 'europe',
             'america', 'antarctica', 'australia', 'pacific', 'atlantic',
-            'mediterranean', 'sahara', 'gobi', 'arctic', 'antarctic'
+            'mediterranean', 'sahara', 'gobi', 'arctic', 'antarctic',
+            'arboria', 'arboreal', 'gloomwood', 'silverwood'  # Your world-specific places
         }
-        
+
         # Scientific/species indicators (biology terms)
         scientific_indicators = {
             'gryllus', 'arenarius', 'sapiens', 'domesticus',  # Latin binomials
@@ -269,7 +289,46 @@ class CharacterManager:
             'expansion', 'contraction', 'growth', 'decline',
             'sands', 'shifting', 'eternal', 'ancient', 'sacred'
         }
+
+         # Group/Faction indicators (prevents "Dragon Riders" extraction)
         
+        group_indicators = {
+            # Military groups
+            'riders', 'guards', 'guardians', 'warriors', 'soldiers', 'knights',
+            'army', 'armies', 'legion', 'legions', 'force', 'forces',
+            'militia', 'mercenaries', 'troops', 'battalion',
+            
+            # Political groups
+            'council', 'senate', 'parliament', 'assembly',
+            'faction', 'party', 'alliance', 'coalition',
+            
+            # Social groups
+            'people', 'folk', 'clan', 'tribe', 'family',
+            'order', 'guild', 'brotherhood', 'sisterhood',
+            'society', 'organization', 'group',
+            
+            # Specific to your world
+            'elders', 'arborians'
+        } 
+
+        # Event/Phenomenon indicators (prevents "Great Burning" extraction)
+        event_indicators = {
+            # Historical events
+            'war', 'wars', 'battle', 'battles', 'siege', 'sieges',
+            'conflict', 'conflicts', 'rebellion', 'revolution', 'uprising',
+            'invasion', 'incursion', 'raid', 'assault',
+            
+            # Natural/magical events
+            'burning', 'fire', 'flood', 'storm', 'earthquake', 'disaster',
+            'germination', 'sprouting', 'blooming',
+            'era', 'age', 'epoch', 'period',
+            
+            # Ceremonies/milestones
+            'founding', 'discovery', 'coronation', 'reign',
+            'binding', 'sealing', 'banishment',
+            'rebirth', 'renaissance', 'awakening'
+        }
+
         # Character titles (these MUST accompany a name to be valid)
         character_titles = {
             'king', 'queen', 'emperor', 'empress', 'sultan', 'caliph',
@@ -363,24 +422,49 @@ class CharacterManager:
                 if any(geo in full_name_lower for geo in geographic_indicators):
                     i = j if j > i + 1 else i + 1
                     continue
-                
+
                 # 2. REJECT: Scientific terms
                 if any(sci in full_name_lower for sci in scientific_indicators):
                     i = j if j > i + 1 else i + 1
                     continue
-                
+
                 # 3. REJECT: Abstract concepts
                 if any(concept in full_name_lower for concept in abstract_concepts):
                     i = j if j > i + 1 else i + 1
                     continue
-                
-                # 4. REJECT: Just a title without a name
+
+                # 4. REJECT: Group/Faction names (NEW FIX)
+                if any(group in full_name_lower.split() for group in group_indicators):
+                    i = j if j > i + 1 else i + 1
+                    continue
+
+                # 5. REJECT: Event names (NEW FIX)
+                # Check if entity contains event-related words
+                entity_words = set(full_name_lower.split())
+                if entity_words & event_indicators:  # Intersection check
+                    i = j if j > i + 1 else i + 1
+                    continue
+
+                # 6. REJECT: Compound place names (e.g., "Elder Tree", "Sunstone Citadel")
+                # Pattern: [Adjective] + [Geographic term]
+                if len(name_parts) == 2:
+                    last_word = name_parts[-1].lower()
+                    if last_word in geographic_indicators:
+                        i = j if j > i + 1 else i + 1
+                        continue
+
+                # 7. REJECT: Just a title without a name
                 if len(name_parts) == 1 and name_parts[0].lower() in character_titles:
                     i = j if j > i + 1 else i + 1
                     continue
-                
-                # 5. REJECT: Date markers (e.g., "AE", "Year")
+
+                # 8. REJECT: Date markers (e.g., "AE", "Year")
                 if ':' in full_name or '*' in full_name or ')' in full_name:
+                    i = j if j > i + 1 else i + 1
+                    continue
+
+                # 9. REJECT: Possessive forms only (e.g., "Elder Tree's")
+                if full_name.endswith("'s") and len(name_parts) == 1:
                     i = j if j > i + 1 else i + 1
                     continue
                 
@@ -460,6 +544,84 @@ class CharacterManager:
         
         return len(violations) == 0, violations
     
+    def calculate_entity_consistency(self, text: str) -> tuple:
+        """
+        Calculate entity consistency score for quality metrics
+        
+        Returns:
+            (score: float, details: dict) where score is 0.0-1.0
+        """
+        import re
+        
+        # Extract all capitalized entities mentioned in text
+        mentioned_entities = set()
+        for match in re.finditer(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text):
+            entity = match.group()
+            # Filter out common non-entity words
+            if entity.lower() not in {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'from'}:
+                mentioned_entities.add(entity)
+        
+        # Get tracked characters
+        tracked_chars = set(self.roster.keys())
+        
+        # Calculate matches
+        correct_matches = mentioned_entities & tracked_chars
+        false_negatives = tracked_chars - mentioned_entities  # Tracked but not mentioned
+        false_positives = mentioned_entities - tracked_chars  # Mentioned but not tracked
+        
+        # Score calculation
+        if len(tracked_chars) == 0:
+            consistency_score = 0.0
+        else:
+            # Ratio of tracked characters that appear in text
+            coverage = len(correct_matches) / len(tracked_chars)
+            
+            # Penalty for false positives (untracked entities)
+            if len(mentioned_entities) > 0:
+                precision = len(correct_matches) / len(mentioned_entities)
+            else:
+                precision = 1.0
+            
+            # Combined score (F1-like metric)
+            if coverage + precision > 0:
+                consistency_score = 2 * (coverage * precision) / (coverage + precision)
+            else:
+                consistency_score = 0.0
+        
+        details = {
+            'tracked_count': len(tracked_chars),
+            'mentioned_count': len(mentioned_entities),
+            'correct_matches': len(correct_matches),
+            'false_negatives': list(false_negatives),  # Should be mentioned but aren't
+            'false_positives': list(false_positives)[:10],  # Mentioned but not tracked (limit to 10)
+            'consistency_score': consistency_score
+        }
+        
+        return consistency_score, details
+
+    def get_consistency_report(self, text: str) -> str:
+        """
+        Generate human-readable consistency report
+        """
+        score, details = self.calculate_entity_consistency(text)
+        
+        report = f"Entity Consistency: {score:.1%}\n"
+        report += f"Tracked characters: {details['tracked_count']}\n"
+        report += f"Mentioned in text: {details['mentioned_count']}\n"
+        report += f"Correctly matched: {details['correct_matches']}\n"
+        
+        if details['false_negatives']:
+            report += f"\n⚠️ Tracked characters not mentioned:\n"
+            for char in details['false_negatives']:
+                report += f"  - {char}\n"
+        
+        if details['false_positives']:
+            report += f"\n⚠️ Untracked entities mentioned (may need tracking):\n"
+            for entity in details['false_positives'][:5]:  # Show top 5
+                report += f"  - {entity}\n"
+        
+        return report
+
     def get_roster_summary(self) -> str:
         """Get formatted summary of character roster for AI prompt"""
         active = self.get_active_characters()

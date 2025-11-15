@@ -45,6 +45,79 @@ class Config:
         "economic": "trade, resources, wealth, technology",
         "personal": "individual lives, relationships, personal journeys"
     }
+
+    # === PERSONA SYSTEM ===
+    PERSONA_PRESETS = {
+        "Smooth Storyteller": {
+            "description": "Balanced pacing with smooth transitions and emotional depth",
+            "temperature": 0.7,
+            "instructions": """
+            NARRATIVE PERSONA: Smooth Storyteller
+            
+            Your writing style emphasizes:
+            • Smooth transitions between events (use phrases like "Following this...", "In response...", "As a result...")
+            • Emotional beats that show character reactions and consequences
+            • Consistent pacing - don't rush major events or dwell too long on minor ones
+            • Clear cause-and-effect logic that makes the story flow naturally
+            • Soft hooks between scenes that create anticipation without cliffhangers
+            
+            Avoid: Abrupt jumps, disconnected events, robotic listing of facts
+            """
+        },
+        
+        "Epic Chronicler": {
+            "description": "Grand, sweeping narratives with dramatic moments",
+            "temperature": 0.8,
+            "instructions": """
+            NARRATIVE PERSONA: Epic Chronicler
+            
+            Your writing style emphasizes:
+            • Dramatic tension and high-stakes moments
+            • Sweeping, grand-scale events that shape entire civilizations
+            • Powerful imagery and evocative language
+            • Strong emotional highs and lows
+            • Epic scope with lasting consequences
+            
+            Maintain: Gravitas, weight, significance in every event
+            """
+        },
+        
+        "Intimate Historian": {
+            "description": "Personal focus on characters and human stories",
+            "temperature": 0.6,
+            "instructions": """
+            NARRATIVE PERSONA: Intimate Historian
+            
+            Your writing style emphasizes:
+            • Character-driven storytelling with deep emotional resonance
+            • Personal relationships and their evolution over time
+            • Human motivations and internal conflicts
+            • Detailed character actions and reactions
+            • Intimate moments that reveal character depth
+            
+            Focus on: The human element, personal stakes, emotional truth
+            """
+        },
+        
+        "Analytical Archivist": {
+            "description": "Precise, logical progression with clear causality",
+            "temperature": 0.5,
+            "instructions": """
+            NARRATIVE PERSONA: Analytical Archivist
+            
+            Your writing style emphasizes:
+            • Logical progression of events with explicit cause-and-effect
+            • Precise details and factual consistency
+            • Clear documentation of changes over time
+            • Systematic analysis of patterns and trends
+            • Objective tone with minimal emotional embellishment
+            
+            Prioritize: Accuracy, clarity, logical consistency
+            """
+        }
+    }
+
+    DEFAULT_PERSONA = "Smooth Storyteller"
     
     @staticmethod
     def validate():

@@ -271,51 +271,84 @@ class CausalEventChain:
     
     def build_causal_prompt(self, next_event_number: int, character_roster: str = "") -> str:
         """
-        Build a complete prompt that enforces causality
-        This is the KEY function that makes events connected
+        Build a complete prompt that enforces narrative flow
+        ENHANCED with smooth transitions and emotional beats
         """
         prompt = f"""You are generating Event {next_event_number} in a chronological narrative.
 
-CRITICAL: This event MUST be a direct consequence of previous events. Show clear cause-and-effect.
+    CRITICAL NARRATIVE FLOW REQUIREMENTS:
 
-{self.get_causation_context(num_events=2)}
+    1. SMOOTH TRANSITIONS (MANDATORY):
+    • Begin by explicitly referencing the previous event
+    • Use transition phrases: "Following...", "In response to...", "As a result of...", "Meanwhile..."
+    • Show the passage of time naturally ("Years later...", "By the next decade...")
+    • Create a narrative bridge that connects cause to effect
+    
+    Example opening: "Following Queen Lyra's assassination, the kingdom fell into chaos..."
 
-{self.get_open_threads_prompt()}
+    2. CAUSE-AND-EFFECT LOGIC:
+    • Show how previous events DIRECTLY cause this event
+    • Identify the triggering action or condition
+    • Explain WHY this event happened (not just WHAT happened)
+    • Connect character motivations to outcomes
+    
+    Example: "King Theron's decree (cause) led to widespread rebellion (effect)"
 
-{character_roster}
+    3. EMOTIONAL BEATS:
+    • Include character reactions to previous events
+    • Show the emotional weight of consequences
+    • Balance action with reflection
+    • Create moments of tension, hope, fear, or resolution
+    
+    Example: "The survivors mourned their losses, but hope stirred when..."
 
-MANDATORY REQUIREMENTS FOR EVENT {next_event_number}:
+    4. CONSISTENT PACING:
+    • Don't rush through major events
+    • Don't over-explain minor details
+    • Balance narrative density across the event
+    • Create rhythm: tension → action → consequence → reflection
 
-1. CAUSAL CONNECTION: Begin by referencing what happened in the previous event
-   - Example: "Following the assassination of King Alaric..."
-   - Example: "In response to Queen Lyra's decree..."
+    5. SOFT HOOKS (End with Forward Momentum):
+    • Conclude with a consequence that creates anticipation
+    • Open a question or conflict for the next event
+    • Don't use cliffhangers - use natural story momentum
+    
+    Example endings:
+    • "But this peace would not last, as dark omens appeared in the east..."
+    • "Meanwhile, a new power was rising in the shadows..."
+    • "Yet the cost of victory would soon become clear..."
 
-2. CHARACTER CONTINUITY: Use characters from previous events
-   - If Queen Lyra appeared before, mention her current state/reaction
-   - If The Assassin acted, show consequences of their actions
-   - Do NOT introduce new major characters without context
+    6. PACING REQUIREMENT:
+    • Maintain consistent time gaps between events
+    • If previous events jumped 50+ years, continue similar scale
+    • Avoid sudden 1-year jumps after decades-long gaps
+    • Example: Year 1 → 53 → 112 → 187 (consistent ~50-70 year gaps)
 
-3. CONSEQUENCE RESOLUTION: Address at least ONE open plot thread from above
-   - Show how previous events impact current situation
-   - Create new consequences for future events
+    {self.get_causation_context(num_events=2)}
 
-4. EMOTIONAL PACING: Match or escalate the emotional tone
-   - Current tone: {self.current_tone}
+    {self.get_open_threads_prompt()}
 
-5. HOOK ENDING: End with a consequence or question that leads to the next event
-   - Example: "But this peace would not last..."
-   - Example: "Meanwhile, a new threat emerged..."
+    {character_roster}
 
-FORBIDDEN:
-- Starting with "In Year X" without connection to previous event
-- Introducing unrelated events or characters
-- Ignoring what happened in previous events
-- Mentioning deceased characters (see DECEASED list above)
+    MANDATORY OPENING STRUCTURE:
+    Start your event with ONE of these patterns:
+    • "[Time marker], following [previous event], [new situation]..."
+    • "In response to [previous event], [character] [action]..."
+    • "As [previous event] unfolded, [consequence] emerged..."
+    • "[Time marker] after [previous event], [new development]..."
 
-Generate Event {next_event_number} now, following these rules strictly.
-"""
+    FORBIDDEN:
+    - Starting with a date alone (❌ "In Year 523...")
+    - Disconnected events that ignore previous context
+    - Robotic listing of facts without narrative flow
+    - Mentioning deceased characters without revival explanation
+    - Abrupt topic changes without transitions
+
+    Generate Event {next_event_number} now with smooth, natural narrative flow.
+    """
         
         return prompt
+
     
     def get_chain_summary(self) -> str:
         """Get a summary of the entire event chain"""

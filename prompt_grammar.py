@@ -108,7 +108,8 @@ Format your response as a narrative chronology with clear temporal markers.
     def build_prompt(cls, theme, custom_input="", time_span="moderate", 
                     event_density="moderate", narrative_focus="political", 
                     word_range="500-1000 words", 
-                    character_roster_summary="", causal_context="", num_characters=5):
+                    character_roster_summary="", causal_context="", num_characters=5,
+                    persona_instructions=""):
         """
         Build a complete prompt with all variable slots filled
         NOW INCLUDES: Character roster and causal event context
@@ -201,6 +202,10 @@ CRITICAL CAUSALITY RULES:
             character_roster=character_roster,
             causal_context=formatted_causal_context
         )
+
+        # Add persona instructions
+        if persona_instructions:
+            system_prompt = persona_instructions + "\n\n" + system_prompt
 
         if character_roster_summary and "ACTIVE CHARACTERS" in character_roster_summary:
             system_prompt += f"""
