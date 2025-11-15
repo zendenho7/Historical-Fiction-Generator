@@ -12,6 +12,9 @@ from config import Config
 import sys
 import os
 
+from session_manager import SessionManager
+#from input_validator import InputValidator 
+
 # Page configuration
 st.set_page_config(
     page_title="Historical Fiction Generator",
@@ -69,6 +72,8 @@ if 'generator' not in st.session_state:
     try:
         st.session_state.generator = HistoricalFictionGenerator()
         st.session_state.generation_history = []
+        st.session_state.session_manager = SessionManager()
+        st.session_state.current_session_id = st.session_state.session_manager.session_id
     except Exception as e:
         st.error(f"❌ Failed to initialize generator: {str(e)}")
         st.info("💡 Make sure your `.env` file is configured with GEMINI_API_KEY")
@@ -138,7 +143,60 @@ st.markdown("---")  # Separator line
 # Sidebar - Configuration and Parameters
 with st.sidebar:
     st.header("⚙️ Configuration")
-    
+
+    # === SESSION CONTROLS ===
+    st.subheader("💾 Session Management")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("💾 Save Session", use_container_width=True):
+            try:
+                filepath = st.session_state.session_manager.save()
+                st.success(f"✅ Saved!")
+                st.caption(f"File: {filepath}")
+            except Exception as e:
+                st.error(f"❌ Save failed: {e}")
+
+    with col2:
+        if st.button("🔄 New Session", use_container_width=True):
+            # Clear all relevant session state
+            st.session_state.session_manager = SessionManager()
+            st.session_state.current_session_id = st.session_state.session_manager.session_id
+            # Don't call st.rerun() here - let Streamlit handle it naturally
+            # The button click will trigger a rerun automatically
+
+    # Load existing session
+    available_sessions = SessionManager.list_available_sessions()
+    if available_sessions:
+        with st.expander("📂 Load Previous Session", expanded=False):
+            session_options = {
+                f"{s['session_id']} - {s['theme']} ({s['events']} events)": s['session_id'] 
+                for s in available_sessions
+            }
+            
+            selected = st.selectbox(
+                "Select session:",
+                options=list(session_options.keys()),
+                key="session_select"
+            )
+            
+            if st.button("Load Selected", key="load_btn"):
+                try:
+                    session_id = session_options[selected]
+                    st.session_state.session_manager = SessionManager.load(session_id)
+                    st.session_state.current_session_id = session_id
+                    st.success(f"✅ Loaded: {session_id}")
+                    # Don't call st.rerun() here either
+                except Exception as e:
+                    st.error(f"❌ Load failed: {e}")
+
+    # Display current session info
+    st.caption(f"Current: {st.session_state.current_session_id}")
+    st.caption(f"Events generated: {st.session_state.session_manager.metadata['generation_count']}")
+
+    st.divider()
+
     # Model information
     with st.expander("🤖 Model Information", expanded=False):
         st.info(f"**Current Model:** {st.session_state.generator.model_name}")
@@ -387,6 +445,26 @@ with st.sidebar:
     """)
     
     st.divider()
+
+    # CHARACTER ROSTER DISPLAY ===
+    st.subheader("👥 Character Roster")
+    
+    active_chars = st.session_state.session_manager.character_manager.get_active_characters()
+    deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
+    
+    if active_chars:
+        st.markdown("**Active Characters:**")
+        for char in active_chars:
+            st.markdown(f"- ✅ {char.name} ({char.role})")
+    else:
+        st.caption("No characters yet")
+    
+    if deceased_chars:
+        st.markdown("**Deceased:**")
+        for char in deceased_chars:
+            st.markdown(f"- 💀 {char.name}")
+    
+    st.divider()
     
     # Generation button
     generate_button = st.button("🚀 Generate Chronology", type="primary", use_container_width=True)
@@ -406,7 +484,8 @@ with col1:
                     time_span=time_span_value,
                     event_density=event_density_value,
                     narrative_focus=narrative_focus_value,
-                    use_multi_stage=use_multistage
+                    use_multi_stage=use_multistage,
+                    session_manager=st.session_state.session_manager
                 )
                 
                 # Store in session state
@@ -499,9 +578,29 @@ with col2:
         result = st.session_state.current_result
 
         if result.get('success'):
-                # === METADATA & EVALUATION SECTION ===
+
+            # === METADATA & EVALUATION SECTION ===
             st.markdown("---")
             st.markdown("## 📊 Metadata & Evaluation")
+
+            # === EVENT CHAIN DISPLAY ===
+            st.markdown("### 📊 Event Chain")
+            
+            events = st.session_state.session_manager.event_chain.events
+            if events:
+                st.caption(f"Total events in chain: {len(events)}")
+                
+                with st.expander("View Event Summaries", expanded=False):
+                    for event in events:
+                        st.markdown(f"**Event {event.event_number}:**")
+                        st.caption(event.summary if event.summary else "No summary")
+                        if event.affected_characters:
+                            st.caption(f"Characters: {', '.join(event.affected_characters)}")
+                        st.markdown("---")
+            else:
+                st.caption("No events in chain yet")
+            
+            st.divider()
             
             # === QUALITY METRICS WITH COLOR CODING ===
             st.markdown("### 📈 Quality Metrics")

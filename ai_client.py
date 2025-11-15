@@ -8,6 +8,7 @@ import time
 from config import Config
 from prompt_grammar import PromptGrammar
 from stateful_generator import StatefulHistoryGenerator
+from session_manager import SessionManager
 
 class HistoricalFictionGenerator:
     """Enhanced generator with course concepts applied"""
@@ -51,25 +52,43 @@ class HistoricalFictionGenerator:
         
     def generate(self, theme, custom_input="", time_span="moderate",
                 event_density="moderate", narrative_focus="political",
-                use_multi_stage=True):
+                use_multi_stage=True, session_manager=None):
         """
-        Generate with ALL course concepts applied:
-        - Grammar-based prompts
-        - Parameter-driven variation
-        - Multi-stage pipeline (optional)
-        - State tracking
+        Generate with ALL course concepts applied + NEW session integration
         """
         start_time = time.time()
         
         try:
-            # TECHNIQUE 1: Grammar-based prompt construction
+            # Get session manager (use provided or create temporary)
+            if session_manager is None:
+                session_manager = SessionManager()
+                session_manager.update_metadata(theme=theme)
+            
+            # Increment event number
+            current_event = session_manager.metadata['generation_count'] + 1
+            session_manager.character_manager.update_event_number(current_event)
+            
+            # Get character roster summary
+            character_roster_summary = session_manager.character_manager.get_roster_summary()
+            
+            # Get causal context (if events exist)
+            causal_context = ""
+            if session_manager.event_chain.events:
+                causal_context = session_manager.event_chain.build_causal_prompt(
+                    next_event_number=current_event,
+                    character_roster=character_roster_summary
+                )
+            
+            # TECHNIQUE 1: Grammar-based prompt construction WITH character/causal context
             base_prompt = PromptGrammar.build_prompt(
                 theme=theme,
                 custom_input=custom_input,
                 time_span=time_span,
                 event_density=event_density,
                 narrative_focus=narrative_focus,
-                word_range=f"{Config.MIN_WORDS}-{Config.MAX_WORDS} words"
+                word_range=f"{Config.MIN_WORDS}-{Config.MAX_WORDS} words",
+                character_roster_summary=character_roster_summary,
+                causal_context=causal_context
             )
             
             # TECHNIQUE 2 & 3: Multi-stage pipeline with state tracking
@@ -81,7 +100,8 @@ class HistoricalFictionGenerator:
                     custom_input=custom_input,
                     stages=2,
                     temperature=Config.TEMPERATURE,
-                    max_tokens=Config.MAX_TOKENS
+                    max_tokens=Config.MAX_TOKENS,
+                    session_manager=session_manager  # Pass session manager
                 )
                 
                 if not result["success"]:
@@ -92,7 +112,7 @@ class HistoricalFictionGenerator:
                 stages_info = result["stages"]
                 
             else:
-                # Single-stage generation (faster, simpler)
+                # Single-stage generation
                 response = self.model.generate_content(
                     base_prompt,
                     generation_config={
@@ -107,6 +127,34 @@ class HistoricalFictionGenerator:
             
             if not content:
                 raise Exception("No content generated")
+            
+            # NEW: Update session with generated content
+            event_node = session_manager.event_chain.add_event(current_event, content)
+            
+            # Extract and track characters from generated text
+            # ONLY if this is the first event (to establish roster)
+            if current_event == 1:
+                extracted_chars = session_manager.character_manager.extract_characters_from_text(content)
+                for char_name in extracted_chars:
+                    if not session_manager.character_manager.get_character(char_name):
+                        # Intelligently determine role based on context
+                        role = session_manager.character_manager.determine_character_role(char_name, content)
+                        session_manager.character_manager.add_character(char_name, role=role, event_num=current_event)
+    
+            
+            # Analyze event for consequences
+            session_manager.event_chain.analyze_event_and_update(
+                event_node, 
+                character_names=[c.name for c in session_manager.character_manager.roster.values()]
+            )
+            
+            # Validate no dead characters appear
+            is_valid, violations = session_manager.character_manager.validate_character_usage(content)
+            if not is_valid:
+                print(f"⚠️ Warning: Dead characters detected in output: {violations}")
+            
+            # Increment generation count
+            session_manager.increment_generation_count()
             
             word_count = len(content.split())
             generation_time = time.time() - start_time
@@ -126,7 +174,6 @@ class HistoricalFictionGenerator:
                 "completion_tokens": "-",
                 "meets_requirements": Config.MIN_WORDS <= word_count <= Config.MAX_WORDS,
                 "error": None,
-                # NEW: Enhanced metadata
                 "parameters": {
                     "time_span": time_span,
                     "event_density": event_density,
@@ -134,7 +181,14 @@ class HistoricalFictionGenerator:
                     "multi_stage": use_multi_stage
                 },
                 "entities_tracked": entities,
-                "stages": stages_info
+                "stages": stages_info,
+                # NEW: Session information
+                "session_id": session_manager.session_id,
+                "event_number": current_event,
+                "character_validation": {
+                    "is_valid": is_valid,
+                    "violations": violations
+                }
             }
             
             return result
@@ -162,7 +216,7 @@ class HistoricalFictionGenerator:
                 "entities_tracked": {},
                 "stages": []
             }
-    
+
     def _extract_text(self, response):
         """Safely extract text from Gemini response"""
         if hasattr(response, "candidates") and response.candidates:

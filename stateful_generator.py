@@ -72,7 +72,8 @@ class StatefulHistoryGenerator:
             return None
     
     def generate_with_state(self, base_prompt, theme, custom_input="", 
-                           stages=2, temperature=0.7, max_tokens=2000):
+                       stages=2, temperature=0.7, max_tokens=2000,
+                       session_manager=None):
         """
         Generate with multi-stage pipeline and state tracking
         ENHANCED with word count enforcement
@@ -101,19 +102,28 @@ class StatefulHistoryGenerator:
                 # CRITICAL: Enforce word count limit
                 content = self._trim_to_word_limit(content, max_words=1000, min_words=500)
                 
-                # Extract entities
-                self._extract_entities(content)
-                
+                # Extract entities (use session_manager if available)
+                if session_manager:
+                    # Let session_manager handle character tracking
+                    entities = {
+                        'characters': [c.name for c in session_manager.character_manager.get_active_characters()],
+                        'places': []  # Can be enhanced later
+                    }
+                else:
+                    # Fallback to old method
+                    self._extract_entities(content)
+                    entities = {
+                        'characters': list(self.tracked_entities['characters'])[:15],
+                        'places': list(self.tracked_entities['places'])[:15]
+                    }
+
                 return {
                     'success': True,
                     'final_text': content,
-                    'entities': {
-                        'characters': list(self.tracked_entities['characters'])[:15],
-                        'places': list(self.tracked_entities['places'])[:15]
-                    },
+                    'entities': entities,
                     'stages': None
                 }
-            
+
             else:
                 # Multi-stage generation (stages == 2)
                 
@@ -210,15 +220,26 @@ REMEMBER: Final output must be 500-1000 words. Currently at {stage1_word_count} 
                 
                 # Re-extract entities from final content
                 self.tracked_entities = {'characters': set(), 'places': set()}
-                self._extract_entities(final_content)
-                
+
+                # Extract entities (use session_manager if available)
+                if session_manager:
+                    # Let session_manager handle character tracking
+                    entities = {
+                        'characters': [c.name for c in session_manager.character_manager.get_active_characters()],
+                        'places': []  # Can be enhanced later
+                    }
+                else:
+                    # Fallback to old method
+                    self._extract_entities(final_content)
+                    entities = {
+                        'characters': list(self.tracked_entities['characters'])[:15],
+                        'places': list(self.tracked_entities['places'])[:15]
+                    }
+
                 return {
                     'success': True,
                     'final_text': final_content,
-                    'entities': {
-                        'characters': list(self.tracked_entities['characters'])[:15],
-                        'places': list(self.tracked_entities['places'])[:15]
-                    },
+                    'entities': entities,
                     'stages': {
                         'stage1_word_count': stage1_word_count,
                         'stage2_word_count': final_word_count,

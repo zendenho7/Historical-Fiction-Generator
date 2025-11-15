@@ -103,22 +103,19 @@ Format your response as a narrative chronology with clear temporal markers.
     @classmethod
     def build_prompt(cls, theme, custom_input="", time_span="moderate", 
                     event_density="moderate", narrative_focus="political", 
-                    word_range="500-1000 words"):
+                    word_range="500-1000 words", 
+                    character_roster_summary="", causal_context=""):
         """
         Build a complete prompt with all variable slots filled
-        This implements the grammar replacement concept:
-        - Theme affects vocabulary domain
-        - Time span affects temporal scale  
-        - Event density affects number of events
-        - Custom input seeds specific entities/state
+        NOW INCLUDES: Character roster and causal event context
         """
         from config import Config
         
         # Calculate word count targets based on time_span
         word_targets = {
-            'brief': (500, 700),      # Shorter chronologies
-            'moderate': (650, 900),   # Medium chronologies
-            'epic': (800, 1000)       # Longer chronologies
+            'brief': (500, 700),
+            'moderate': (650, 900),
+            'epic': (800, 1000)
         }
         
         min_words, max_words = word_targets.get(time_span, (650, 900))
@@ -131,23 +128,49 @@ Format your response as a narrative chronology with clear temporal markers.
         semantic_guidance = ""
         if vocab:
             semantic_guidance = f"""
-SEMANTIC GUIDANCE for {theme}:
-- Key entity types: {', '.join(vocab.get('entities', []))}
-- Typical events: {', '.join(vocab.get('events', []))}
-- Imagery/atmosphere: {', '.join(vocab.get('imagery', []))}
+    SEMANTIC GUIDANCE for {theme}:
+    - Key entity types: {', '.join(vocab.get('entities', []))}
+    - Typical events: {', '.join(vocab.get('events', []))}
+    - Imagery/atmosphere: {', '.join(vocab.get('imagery', []))}
 
-Use these elements naturally in your chronology to maintain thematic consistency.
-"""
+    Use these elements naturally in your chronology to maintain thematic consistency.
+    """
         
         # Build constraints based on custom input
         additional_constraints = ""
         if custom_input:
             additional_constraints = f"""
-CUSTOM SPECIFICATIONS:
-The chronology must incorporate: {custom_input}
+    CUSTOM SPECIFICATIONS:
+    The chronology must incorporate: {custom_input}
 
-Use these details as the initial state - they should influence the entities, events, and narrative arc.
-"""
+    Use these details as the initial state - they should influence the entities, events, and narrative arc.
+    """
+        
+        # NEW: Add character roster section
+        character_section = ""
+        if character_roster_summary:
+            character_section = f"""
+    {character_roster_summary}
+
+    CRITICAL CHARACTER RULES:
+    - Only use ACTIVE characters in your narrative
+    - NEVER mention DECEASED characters unless they are being revived with in-universe explanation
+    - Maintain consistency with established character states and actions
+    """
+        
+        # NEW: Add causal context section
+        causal_section = ""
+        if causal_context:
+            causal_section = f"""
+    {causal_context}
+
+    CRITICAL CAUSALITY RULES:
+    - This event MUST connect to and be caused by previous events
+    - Reference specific characters and events from above
+    - Show clear cause-and-effect relationships
+    - Address at least one open plot thread
+    - End with a consequence or hook for the next event
+    """
         
         # Assemble full prompt using grammar rules
         system_prompt = cls.BASE_STRUCTURE.format(
@@ -162,4 +185,12 @@ Use these details as the initial state - they should influence the entities, eve
             semantic_guidance=semantic_guidance
         )
         
+        # Append character and causal sections
+        if character_section:
+            system_prompt += f"\n\n{character_section}"
+        
+        if causal_section:
+            system_prompt += f"\n\n{causal_section}"
+        
         return system_prompt
+
