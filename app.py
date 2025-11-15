@@ -495,7 +495,8 @@ with col1:
                     event_density=event_density_value,
                     narrative_focus=narrative_focus_value,
                     use_multi_stage=use_multistage,
-                    session_manager=st.session_state.session_manager
+                    session_manager=st.session_state.session_manager,
+                    num_characters=st.session_state.num_characters
                 )
                 
                 # Store in session state
