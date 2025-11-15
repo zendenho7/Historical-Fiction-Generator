@@ -52,7 +52,7 @@ class HistoricalFictionGenerator:
         
     def generate(self, theme, custom_input="", time_span="moderate",
                 event_density="moderate", narrative_focus="political",
-                use_multi_stage=True, session_manager=None):
+                use_multi_stage=True, session_manager=None, num_characters=5):
         """
         Generate with ALL course concepts applied + NEW session integration
         """
@@ -88,7 +88,8 @@ class HistoricalFictionGenerator:
                 narrative_focus=narrative_focus,
                 word_range=f"{Config.MIN_WORDS}-{Config.MAX_WORDS} words",
                 character_roster_summary=character_roster_summary,
-                causal_context=causal_context
+                causal_context=causal_context,
+            num_characters=num_characters
             )
             
             # TECHNIQUE 2 & 3: Multi-stage pipeline with state tracking
