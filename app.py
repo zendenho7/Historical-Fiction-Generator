@@ -163,8 +163,6 @@ with st.sidebar:
             # Clear all relevant session state
             st.session_state.session_manager = SessionManager()
             st.session_state.current_session_id = st.session_state.session_manager.session_id
-            # Don't call st.rerun() here - let Streamlit handle it naturally
-            # The button click will trigger a rerun automatically
 
     # Load existing session
     available_sessions = SessionManager.list_available_sessions()
@@ -211,6 +209,38 @@ with st.sidebar:
         Config.THEMES,
         help="Select the type of historical fiction to generate"
     )
+
+    st.divider()
+
+    # ========== Character Configuration ==========
+    st.sidebar.subheader("🎭 Character Configuration")
+
+    num_characters = st.sidebar.slider(
+        "Number of Main Characters",
+        min_value=3,
+        max_value=10,
+        value=5,
+        step=1,
+        help="How many major characters will drive your story. These will be tracked throughout the narrative.",
+        key="num_characters_slider"
+    )
+
+    # Optional: Show character distribution hint
+    with st.sidebar.expander("ℹ️ Character Distribution Guide"):
+        st.write(f"""
+        **For {num_characters} characters:**
+        - ~{max(1, num_characters // 3)} Main protagonists
+        - ~{max(1, num_characters // 2)} Supporting characters
+        - ~{max(1, num_characters - (num_characters // 3) - (num_characters // 2))} Minor roles
+        
+        Characters will be automatically tracked and their fates monitored.
+        """)
+
+    # Store in session state for access across reruns
+    if 'num_characters' not in st.session_state:
+        st.session_state.num_characters = num_characters
+    else:
+        st.session_state.num_characters = num_characters
     
     st.divider()
     
@@ -445,26 +475,6 @@ with st.sidebar:
     """)
     
     st.divider()
-
-    # CHARACTER ROSTER DISPLAY ===
-    st.subheader("👥 Character Roster")
-    
-    active_chars = st.session_state.session_manager.character_manager.get_active_characters()
-    deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
-    
-    if active_chars:
-        st.markdown("**Active Characters:**")
-        for char in active_chars:
-            st.markdown(f"- ✅ {char.name} ({char.role})")
-    else:
-        st.caption("No characters yet")
-    
-    if deceased_chars:
-        st.markdown("**Deceased:**")
-        for char in deceased_chars:
-            st.markdown(f"- 💀 {char.name}")
-    
-    st.divider()
     
     # Generation button
     generate_button = st.button("🚀 Generate Chronology", type="primary", use_container_width=True)
@@ -513,10 +523,6 @@ with col1:
             # Extract the generated content
             content = result.get('content', '')
             word_count = result.get('word_count', 0)
-            
-            # === GENERATED CONTENT SECTION ===
-            st.markdown("---")
-            st.markdown("## 📖 Generated Content")
             
             # Display the generated chronology
             st.markdown(content)
@@ -572,7 +578,25 @@ with col1:
                         st.error(f"❌ Error saving file: {e}")
 
 with col2:
-    st.header("📊 Metadata & Evaluation")
+        # CHARACTER ROSTER DISPLAY ===
+    st.header("👥 Character Roster")
+    
+    active_chars = st.session_state.session_manager.character_manager.get_active_characters()
+    deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
+    
+    if active_chars:
+        st.markdown("**Active Characters:**")
+        for char in active_chars:
+            st.markdown(f"- ✅ {char.name} ({char.role})")
+    else:
+        st.caption("No characters yet")
+    
+    if deceased_chars:
+        st.markdown("**Deceased:**")
+        for char in deceased_chars:
+            st.markdown(f"- 💀 {char.name}")
+    
+    st.divider()
     
     if 'current_result' in st.session_state and st.session_state.current_result:
         result = st.session_state.current_result

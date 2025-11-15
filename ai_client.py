@@ -142,10 +142,10 @@ class HistoricalFictionGenerator:
                         session_manager.character_manager.add_character(char_name, role=role, event_num=current_event)
     
             
-            # Analyze event for consequences
+            # Analyze event for consequences AND deaths
             session_manager.event_chain.analyze_event_and_update(
                 event_node, 
-                character_names=[c.name for c in session_manager.character_manager.roster.values()]
+                character_manager=session_manager.character_manager
             )
             
             # Validate no dead characters appear

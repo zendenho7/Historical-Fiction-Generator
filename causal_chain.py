@@ -221,11 +221,8 @@ class CausalEventChain:
         
         return consequences[:3]  # Max 3 consequences per event
     
-    def analyze_event_and_update(self, event_node: EventNode, character_names: List[str] = None):
-        """
-        Analyze event content and extract metadata
-        Should be called after adding an event
-        """
+    def analyze_event_and_update(self, event_node: EventNode, character_manager=None):
+        """Analyze event content and extract metadata"""
         content = event_node.content
         
         # Extract summary
@@ -238,11 +235,36 @@ class CausalEventChain:
             event_node.add_consequence(cons)
             self.add_open_thread(cons)
         
-        # Track affected characters (if provided)
-        if character_names:
-            for name in character_names:
-                if name.lower() in content.lower():
-                    event_node.add_affected_character(name)
+        # 🆕 NEW: Extract deaths and update CharacterManager
+        if character_manager:
+            death_patterns = [
+                r"(\w+(?:\s+\w+)?)\s+(?:was\s+)?(?:killed|died|perished|murdered|slain|assassinated|falls\s+to)",
+                r"(?:death|demise|execution)\s+of\s+(\w+(?:\s+\w+)?)",
+                r"(\w+(?:\s+\w+)?)\s+(?:death|demise)",
+            ]
+            
+            for pattern in death_patterns:
+                matches = re.findall(pattern, content, re.IGNORECASE)
+                for match in matches:
+                    char_name = match if isinstance(match, str) else match[0]
+                    char_name = char_name.strip()
+                    
+                    # Check if this is a known character
+                    normalized_name = character_manager._normalize_name(char_name)
+                    if normalized_name in character_manager.roster:
+                        char = character_manager.roster[normalized_name]
+                        if char.status == "alive":
+                            character_manager.kill_character(
+                                char.name,
+                                cause=f"Died in Event {event_node.event_number}"
+                            )
+                            print(f"⚰️ Marked {char.name} as deceased in Event {event_node.event_number}")
+            
+            # Track character mentions
+            for char_name, char_state in character_manager.roster.items():
+                if char_state.name.lower() in content.lower():
+                    event_node.add_affected_character(char_state.name)
+                    char_state.update_mention(event_node.event_number)
         
         # Clean up old threads
         self.clear_stale_threads(max_threads=5)
