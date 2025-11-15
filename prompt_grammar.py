@@ -104,7 +104,7 @@ Format your response as a narrative chronology with clear temporal markers.
     def build_prompt(cls, theme, custom_input="", time_span="moderate", 
                     event_density="moderate", narrative_focus="political", 
                     word_range="500-1000 words", 
-                    character_roster_summary="", causal_context=""):
+                    character_roster_summary="", causal_context="", num_characters=5):
         """
         Build a complete prompt with all variable slots filled
         NOW INCLUDES: Character roster and causal event context
@@ -171,6 +171,24 @@ Format your response as a narrative chronology with clear temporal markers.
     - Address at least one open plot thread
     - End with a consequence or hook for the next event
     """
+
+    # NEW: Character count requirement section
+    character_count_section = ""
+    if not character_roster_summary:  # Only for first generation
+        character_count_section = f"""
+    
+    CHARACTER GENERATION REQUIREMENT:
+    - You MUST introduce exactly {num_characters} main characters in this chronology
+    - Give each character a distinct name, role, and personality
+    - Make sure all {num_characters} characters play meaningful roles in the story
+    - Characters should have clear motivations and relationships
+    - Distribute character focus appropriately across the timeline
+    
+    Character distribution suggestion:
+    - {max(1, num_characters // 3)} primary protagonists (most screen time)
+    - {max(1, num_characters // 2)} supporting characters (important roles)
+    - {max(1, num_characters - (num_characters // 3) - (num_characters // 2))} minor characters (smaller but memorable roles)
+    """
         
         # Assemble full prompt using grammar rules
         system_prompt = cls.BASE_STRUCTURE.format(
@@ -191,6 +209,10 @@ Format your response as a narrative chronology with clear temporal markers.
         
         if causal_section:
             system_prompt += f"\n\n{causal_section}"
+
+    # Append character count section
+    if character_count_section:
+        system_prompt += f"\n\n{character_count_section}"
         
         return system_prompt
 
