@@ -12,7 +12,6 @@ from config import Config
 import sys
 import os
 
-from session_manager import SessionManager
 #from input_validator import InputValidator 
 
 st.session_state.needs_rerun = False
@@ -72,6 +71,7 @@ st.markdown("""
 # Initialize session state
 if 'generator' not in st.session_state:
     try:
+        from session_manager import SessionManager
         st.session_state.generator = HistoricalFictionGenerator()
         st.session_state.generation_history = []
         st.session_state.session_manager = SessionManager()
@@ -237,6 +237,7 @@ with st.sidebar:
             # Show confirmation button
             if st.button("⚠️ Confirm New", use_container_width=True, type="secondary", key="confirm_new_btn"):
                 # Create new session
+                from session_manager import SessionManager
                 st.session_state.session_manager = SessionManager()
                 st.session_state.current_session_id = st.session_state.session_manager.session_id
                 st.session_state.confirm_new_session = False  # Reset flag
@@ -250,6 +251,7 @@ with st.sidebar:
                     st.session_state.pending_action = 'new_confirm'  # Trigger rerun to show confirm button
                 else:
                     # No content - safe to reset immediately
+                    from session_manager import SessionManager
                     st.session_state.session_manager = SessionManager()
                     st.session_state.current_session_id = st.session_state.session_manager.session_id
                     st.session_state.pending_action = 'new'
@@ -295,6 +297,7 @@ with st.sidebar:
 
     # Load existing sessions
     st.markdown("")  # Spacing
+    from session_manager import SessionManager
     available_sessions = SessionManager.list_available_sessions()
 
     if available_sessions:
@@ -345,6 +348,7 @@ with st.sidebar:
                     if st.button("📂 Load Selected", key="load_btn", use_container_width=True, type="primary"):
                         try:
                             session_id = session_options[selected]
+                            from session_manager import SessionManager
                             st.session_state.session_manager = SessionManager.load(session_id)
                             st.session_state.current_session_id = session_id
                             st.success(f"✅ Loaded successfully!")
@@ -368,6 +372,7 @@ with st.sidebar:
                         # Second click: Confirm delete
                         if st.button("⚠️ Confirm", key="confirm_delete", type="secondary"):
                             try:
+                                from session_manager import SessionManager
                                 SessionManager.delete_session(session_id)
                                 st.session_state.delete_confirm_id = None  # Reset confirmation
                                 st.success("🗑️ Deleted!")
@@ -801,8 +806,7 @@ with col1:
                     
                     current_count = len(st.session_state.session_manager.character_manager.roster)
                     if current_count != st.session_state.last_character_count:
-                        st.session_state.last_character_count = current_count
-                    st.session_state.needs_rerun = True    
+                        st.session_state.last_character_count = current_count    
                 else:
                     st.error(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
                     

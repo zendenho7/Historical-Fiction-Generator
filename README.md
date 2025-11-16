@@ -2,28 +2,6 @@
 
 Complete implementation with advanced procedural generation techniques from Technical Design course.
 
-## 🎯 Course Concepts Applied
-
-### 1. **Grammar-Based Prompt System** (Week 10 - PCG Techniques)
-- Theme-specific vocabulary domains
-- Structured variable replacement
-- Semantic guidance for coherent output
-
-### 2. **State Management Across Generation** (Week 9 - Dynamic Storytelling)
-- Entity tracking (characters, places, items)
-- Cross-referencing earlier events
-- Cause-and-effect relationship building
-
-### 3. **Multi-Stage Generation Pipeline** (Week 6 - Dynamic Content)
-- Stage 1: Initial chronology skeleton
-- Stage 2: Refinement with entity callbacks
-- Progressive coherence checking
-
-### 4. **Parameter-Driven Content Variation** (Week 10 - Utility Design)
-- Time span control (brief/moderate/epic)
-- Event density adjustment (sparse/moderate/rich)
-- Narrative focus selection (political/cultural/military/economic/personal)
-
 ## 📦 Installation
 
 ### System Requirements

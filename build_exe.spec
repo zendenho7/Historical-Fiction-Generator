@@ -39,6 +39,10 @@ a = Analysis(
             ('ai_client.py', '.'),          # Gemini/OpenAI client
             ('stateful_generator.py', '.'), # State management logic
             ('prompt_grammar.py', '.'),     # Grammar-driven prompt module
+            ('session_manager.py', '.'),     # Session manager
+            ('character_manager.py', '.'),     # Character manager
+            ('input_validator.py', '.'),     # Input validator
+            ('causal_chain.py', '.'),     # casual chain
             ('app.py', '.'),                # Main Streamlit application (critical!)
         ]
     ),
