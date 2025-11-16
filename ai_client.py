@@ -1,3 +1,4 @@
+
 """
 Enhanced AI client with grammar-based prompts, state tracking, and parameters
 """
@@ -315,14 +316,23 @@ class HistoricalFictionGenerator:
         Generate content and retry if character count is wrong.
         Only applies to first generation (when characters are introduced).
         
-        FIXED: Prevents double-generation by properly clearing session state before retry.
+        This wrapper ensures the AI generates exactly the requested number of characters,
+        retrying up to max_retries times if the count doesn't match.
         
         Args:
-            max_retries: Number of retry attempts (default 1)
+            max_retries: Number of retry attempts (default 1, recommend 1-2)
             **kwargs: Same parameters as generate() method
             
         Returns:
             Same dict as generate() method with 'success', 'content', 'error' keys
+            
+        Example:
+            result = generator.generate_with_character_validation(
+                max_retries=1,
+                theme="Fantasy Kingdom",
+                num_characters=5,
+                session_manager=my_session
+            )
         """
         num_characters = kwargs.get('num_characters', 5)
         session_manager = kwargs.get('session_manager')
@@ -332,18 +342,15 @@ class HistoricalFictionGenerator:
             # Not first generation, skip validation and use normal generate
             return self.generate(**kwargs)
         
-        print(f"\n{'='*70}")
+        print(f"\\n{'='*70}")
         print(f"CHARACTER COUNT VALIDATION ENABLED")
         print(f"Target: {num_characters} characters | Max attempts: {max_retries + 1}")
-        print(f"{'='*70}\n")
+        print(f"{'='*70}\\n")
         
         for attempt in range(max_retries + 1):
-            print(f"\n{'='*70}")
+            print(f"\\n{'='*70}")
             print(f"GENERATION ATTEMPT {attempt + 1}/{max_retries + 1}")
             print(f"{'='*70}")
-            
-            # 🐛 FIX: Store original session state before generation
-            original_gen_count = session_manager.metadata.get('generation_count', 0)
             
             result = self.generate(**kwargs)
             
@@ -354,7 +361,7 @@ class HistoricalFictionGenerator:
             # Check character count
             actual_count = len(session_manager.character_manager.roster)
             
-            print(f"\n{'='*70}")
+            print(f"\\n{'='*70}")
             print(f"CHARACTER COUNT CHECK")
             print(f"Target: {num_characters} | Actual: {actual_count}")
             print(f"{'='*70}")
@@ -362,28 +369,20 @@ class HistoricalFictionGenerator:
             if actual_count == num_characters:
                 print(f"✅ CHARACTER COUNT CORRECT: {actual_count}/{num_characters}")
                 print(f"✅ Validation passed on attempt {attempt + 1}")
-                print(f"{'='*70}\n")
+                print(f"{'='*70}\\n")
                 return result
             
             print(f"⚠️  CHARACTER COUNT MISMATCH: {actual_count}/{num_characters}")
             
             if attempt < max_retries:
-                print(f"\n🔄 RETRY TRIGGERED")
+                print(f"\\n🔄 RETRY TRIGGERED")
                 print(f"   Resetting session and retrying with emphasis...")
                 print(f"   Attempts remaining: {max_retries - attempt}")
                 
-                # 🐛 FIX: Complete session reset to prevent double-generation state pollution
-                # Clear character roster
+                # Reset session for retry
                 session_manager.character_manager.roster.clear()
-                session_manager.character_manager.deceased_characters.clear()
-                
-                # Clear event chain completely
                 session_manager.event_chain.events.clear()
-                session_manager.event_chain.event_counter = 0
-                
-                # 🐛 CRITICAL FIX: Reset generation count to original state
-                # This prevents the second generate() call from thinking it's event #2
-                session_manager.metadata['generation_count'] = original_gen_count
+                session_manager.metadata['generation_count'] = 0
                 
                 # Add strong emphasis to custom_input
                 original_input = kwargs.get('custom_input', '')
@@ -398,10 +397,10 @@ List all {num_characters} characters in the CHARACTERS section at the end.
                 kwargs['custom_input'] = emphasis + original_input
                 
             else:
-                print(f"\n❌ VALIDATION FAILED after {max_retries + 1} attempts")
+                print(f"\\n❌ VALIDATION FAILED after {max_retries + 1} attempts")
                 print(f"   Final count: {actual_count} (expected {num_characters})")
                 print(f"   Accepting result with incorrect count.")
-                print(f"{'='*70}\n")
+                print(f"{'='*70}\\n")
                 return result
         
         return result
