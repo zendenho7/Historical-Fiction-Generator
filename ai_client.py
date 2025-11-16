@@ -8,7 +8,6 @@ import time
 from config import Config
 from prompt_grammar import PromptGrammar
 from stateful_generator import StatefulHistoryGenerator
-from session_manager import SessionManager
 
 class HistoricalFictionGenerator:
     """Enhanced generator with course concepts applied"""
@@ -62,6 +61,7 @@ class HistoricalFictionGenerator:
         try:
             # Get session manager (use provided or create temporary)
             if session_manager is None:
+                from session_manager import SessionManager
                 session_manager = SessionManager()
                 session_manager.update_metadata(theme=theme)
             

@@ -802,7 +802,7 @@ with col1:
                     current_count = len(st.session_state.session_manager.character_manager.roster)
                     if current_count != st.session_state.last_character_count:
                         st.session_state.last_character_count = current_count
-                        st.session_state.needs_rerun = True
+                    st.session_state.needs_rerun = True    
                 else:
                     st.error(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
                     
