@@ -153,22 +153,49 @@ class HistoricalFictionGenerator:
             if not content:
                 raise Exception("No content generated")
             
-            # NEW: Update session with generated content
+            if is_streamlit_available():
+                import streamlit as st
+                with st.expander("🐛 DEBUG: View Generated Content", expanded=False):
+                    st.code(content, language="text")
+            
+            # Update session with generated content
             event_node = session_manager.event_chain.add_event(current_event, content)
+
+            # Separate content from metadata
+            narrative_content, character_metadata = self._separate_content_and_metadata(content)
+
+            # Update content to be ONLY the narrative (without metadata)
+            content = narrative_content
             
             # Extract and track characters from generated text
             # ONLY if this is the first event (to establish roster)
             if current_event == 1:
                 # Set story-based session ID on first generation
                 session_manager.set_story_context(theme, custom_input)
-                extracted_chars = session_manager.character_manager.extract_characters_from_text(content, max_characters=num_characters)
-                for char_name in extracted_chars:
-                    if not session_manager.character_manager.get_character(char_name):
-                        # Intelligently determine role based on context
-                        role = session_manager.character_manager.determine_character_role(char_name, content)
-                        session_manager.character_manager.add_character(char_name, role=role, event_num=current_event)
-    
-            
+                
+                if character_metadata:
+                    # Extract from structured metadata (PREFERRED METHOD)
+                    print(f"✅ Using structured metadata extraction")
+                    import re
+                    for char_line in character_metadata:
+                        # Parse: "1. King Aldric III - Role: main"
+                        match = re.match(r'^\d+\.\s+(.+?)\s+-\s+Role:\s+(main|supporting|minor)', char_line, re.IGNORECASE)
+                        if match:
+                            char_name = match.group(1).strip()
+                            role = match.group(2).strip().lower()
+                            
+                            if not session_manager.character_manager.get_character(char_name):
+                                session_manager.character_manager.add_character(char_name, role=role, event_num=current_event)
+                                print(f"  ✓ Added {char_name} ({role})")
+                else:
+                    # Fallback to old method if metadata section not found
+                    print(f"⚠️ Metadata section not found, falling back to text extraction")
+                    extracted_chars = session_manager.character_manager.extract_characters_from_text(content, max_characters=num_characters)
+                    for char_name in extracted_chars:
+                        if not session_manager.character_manager.get_character(char_name):
+                            role = session_manager.character_manager.determine_character_role(char_name, content)
+                            session_manager.character_manager.add_character(char_name, role=role, event_num=current_event)
+
             # Analyze event for consequences AND deaths
             session_manager.event_chain.analyze_event_and_update(
                 event_node, 
@@ -257,6 +284,132 @@ class HistoricalFictionGenerator:
         except:
             return None
     
+    def _separate_content_and_metadata(self, raw_output):
+        """
+        Separate narrative content from character metadata section
+        
+        Returns:
+            tuple: (narrative_content, character_metadata_lines)
+        """
+        # Look for the separator pattern
+        separator_pattern = r'\n-{3,}\s*\n'
+        
+        import re
+        match = re.search(separator_pattern, raw_output, re.IGNORECASE)
+        
+        if match:
+            # Split at the separator
+            narrative = raw_output[:match.start()].strip()
+            metadata_section = raw_output[match.end():].strip()
+            
+            # Extract character lines (format: "1. Name - Role: main")
+            char_lines = []
+            for line in metadata_section.split('\n'):
+                line = line.strip()
+                # Match: "1. Character Name - Role: main"
+                if re.match(r'^\d+\.\s+.+\s+-\s+Role:\s+(main|supporting|minor)', line, re.IGNORECASE):
+                    char_lines.append(line)
+            
+            print(f"✅ Found metadata section with {len(char_lines)} characters")
+            return narrative, char_lines
+        else:
+            print("⚠️ No metadata section found in output")
+            return raw_output, []
+
+    def generate_with_character_validation(self, max_retries=1, **kwargs):
+        """
+        Generate content and retry if character count is wrong.
+        Only applies to first generation (when characters are introduced).
+        
+        This wrapper ensures the AI generates exactly the requested number of characters,
+        retrying up to max_retries times if the count doesn't match.
+        
+        Args:
+            max_retries: Number of retry attempts (default 1, recommend 1-2)
+            **kwargs: Same parameters as generate() method
+            
+        Returns:
+            Same dict as generate() method with 'success', 'content', 'error' keys
+            
+        Example:
+            result = generator.generate_with_character_validation(
+                max_retries=1,
+                theme="Fantasy Kingdom",
+                num_characters=5,
+                session_manager=my_session
+            )
+        """
+        num_characters = kwargs.get('num_characters', 5)
+        session_manager = kwargs.get('session_manager')
+        
+        # Only validate on first generation (when characters are introduced)
+        if not session_manager or session_manager.metadata.get('generation_count', 0) > 0:
+            # Not first generation, skip validation and use normal generate
+            return self.generate(**kwargs)
+        
+        print(f"\\n{'='*70}")
+        print(f"CHARACTER COUNT VALIDATION ENABLED")
+        print(f"Target: {num_characters} characters | Max attempts: {max_retries + 1}")
+        print(f"{'='*70}\\n")
+        
+        for attempt in range(max_retries + 1):
+            print(f"\\n{'='*70}")
+            print(f"GENERATION ATTEMPT {attempt + 1}/{max_retries + 1}")
+            print(f"{'='*70}")
+            
+            result = self.generate(**kwargs)
+            
+            if not result['success']:
+                print(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
+                return result
+            
+            # Check character count
+            actual_count = len(session_manager.character_manager.roster)
+            
+            print(f"\\n{'='*70}")
+            print(f"CHARACTER COUNT CHECK")
+            print(f"Target: {num_characters} | Actual: {actual_count}")
+            print(f"{'='*70}")
+            
+            if actual_count == num_characters:
+                print(f"✅ CHARACTER COUNT CORRECT: {actual_count}/{num_characters}")
+                print(f"✅ Validation passed on attempt {attempt + 1}")
+                print(f"{'='*70}\\n")
+                return result
+            
+            print(f"⚠️  CHARACTER COUNT MISMATCH: {actual_count}/{num_characters}")
+            
+            if attempt < max_retries:
+                print(f"\\n🔄 RETRY TRIGGERED")
+                print(f"   Resetting session and retrying with emphasis...")
+                print(f"   Attempts remaining: {max_retries - attempt}")
+                
+                # Reset session for retry
+                session_manager.character_manager.roster.clear()
+                session_manager.event_chain.events.clear()
+                session_manager.metadata['generation_count'] = 0
+                
+                # Add strong emphasis to custom_input
+                original_input = kwargs.get('custom_input', '')
+                emphasis = f"""
+🚨 CRITICAL REQUIREMENT 🚨
+You MUST generate EXACTLY {num_characters} main characters.
+Previous attempt generated {actual_count} characters, which is WRONG.
+Count carefully: {num_characters} characters total.
+List all {num_characters} characters in the CHARACTERS section at the end.
+
+"""
+                kwargs['custom_input'] = emphasis + original_input
+                
+            else:
+                print(f"\\n❌ VALIDATION FAILED after {max_retries + 1} attempts")
+                print(f"   Final count: {actual_count} (expected {num_characters})")
+                print(f"   Accepting result with incorrect count.")
+                print(f"{'='*70}\\n")
+                return result
+        
+        return result
+
     def batch_generate(self, test_cases):
         """
         Generate content for multiple test cases

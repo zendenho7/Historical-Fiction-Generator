@@ -149,7 +149,7 @@ The chronology must incorporate: {custom_input}
 
 Use these details as the initial state - they should influence the entities, events, and narrative arc."""
         
-        # 3. Character Requirements (only for first generation)
+        # 3. Character Requirements
         character_requirements = ""
         if not character_roster_summary:  # First event - need to introduce characters
             character_requirements = f"""CHARACTER GENERATION REQUIREMENT:
@@ -160,9 +160,40 @@ Use these details as the initial state - they should influence the entities, eve
 - Distribute character focus appropriately across the timeline
 
 Character distribution:
-  • {max(1, num_characters // 3)} primary protagonist(s) - central to the story
-  • {max(1, num_characters // 2)} supporting character(s) - important roles
-  • {max(1, num_characters - (num_characters // 3) - (num_characters // 2))} minor character(s) - smaller but memorable roles"""
+ • {max(1, num_characters // 3)} primary protagonist(s) - central to the story
+ • {max(1, num_characters // 2)} supporting character(s) - important roles
+ • {max(1, num_characters - (num_characters // 3) - (num_characters // 2))} minor character(s) - smaller but memorable roles
+
+⚠️  MANDATORY OUTPUT FORMAT (CRITICAL):
+After writing your complete chronology, you MUST end with this EXACT format:
+
+---
+CHARACTERS:
+1. [Character Name] - Role: [main/supporting/minor]
+2. [Character Name] - Role: [main/supporting/minor]
+3. [Character Name] - Role: [main/supporting/minor]
+...
+{num_characters}. [Character Name] - Role: [main/supporting/minor]
+
+EXAMPLE of correct format:
+---
+CHARACTERS:
+1. King Aldric III - Role: main
+2. Queen Seraphine - Role: main
+3. Commander Theron - Role: supporting
+4. Scholar Mira - Role: supporting
+5. Blacksmith Gareth - Role: minor
+
+CRITICAL RULES:
+✓ The separator line is exactly three dashes: ---
+✓ The next line is exactly: CHARACTERS:
+✓ Each character is numbered: 1., 2., 3., etc.
+✓ Format is: [Number]. [Name] - Role: [main/supporting/minor]
+✓ You MUST list EXACTLY {num_characters} characters
+✓ Each character MUST have a role: main, supporting, or minor
+✓ This metadata section comes AFTER your story content
+
+DO NOT forget this format. Your chronology will not be processed correctly without it."""
         
         # 4. Character Roster (existing characters - subsequent events)
         character_roster = ""

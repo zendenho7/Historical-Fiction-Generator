@@ -731,7 +731,8 @@ with col1:
 
         with st.spinner("🔄 Generating chronology..."):
             try:
-                result = st.session_state.generator.generate(
+                result = st.session_state.generator.generate_with_character_validation(
+                    max_retries=1,
                     theme=theme,
                     custom_input=custom_input,
                     time_span=time_span_value,
@@ -1006,7 +1007,6 @@ with col2:
                     st.markdown(":blue[✨ Multi-stage pipeline]")
                 else:
                     st.markdown(":gray[⚡ Single-stage]")
-                st.markdown("#### Score Breakdown")
             
             # === GENERATION STAGES (if multi-stage was used) ===
             if result.get('stages'):

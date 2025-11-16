@@ -528,6 +528,78 @@ class CharacterManager:
         # Limit to 20 if no max specified
         return character_names[:20] if not max_characters else character_names
     
+    def extract_characters_from_structured_output(self, text: str, 
+                                                   expected_count: int) -> List[Dict]:
+        """
+        Extract characters from AI-generated structured list at end of text.
+        This method is more reliable than heuristic NLP parsing.
+        
+        Format expected:
+        ---
+        CHARACTERS:
+        1. Name - Role: main/supporting/minor
+        2. Name - Role: main/supporting/minor
+        
+        Args:
+            text: Full generated text including character list
+            expected_count: Number of characters we expect to find
+            
+        Returns:
+            List of dicts with 'name' and 'role' keys, or None if not found
+        """
+        import re
+        
+        # Find the "---\\nCHARACTERS:" section
+        match = re.search(r'---\\s*CHARACTERS:\\s*(.+?)$', text, 
+                         re.DOTALL | re.IGNORECASE)
+        
+        if not match:
+            print("⚠️  No structured character list found in output")
+            return None
+        
+        char_section = match.group(1)
+        characters = []
+        
+        # Parse numbered list: "1. King Alaric - Role: main"
+        for line in char_section.split('\\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Match patterns:
+            # "1. Name - Role: main"
+            # "1. Name (Role: main)"  
+            # "1. Name - main"
+            char_match = re.match(
+                r'\\d+\\.\\s*([^-\\(]+?)\\s*[-\\(]?\\s*(?:Role:\\s*)?(main|supporting|minor)',
+                line,
+                re.IGNORECASE
+            )
+            
+            if char_match:
+                name = char_match.group(1).strip()
+                role = char_match.group(2).strip().lower()
+                
+                # Validate role
+                if role not in ['main', 'supporting', 'minor']:
+                    print(f"⚠️  Invalid role '{role}' for {name}, defaulting to 'supporting'")
+                    role = 'supporting'
+                
+                characters.append({
+                    'name': name,
+                    'role': role
+                })
+                print(f"   ✓ Extracted: {name} ({role})")
+        
+        # Validate count
+        if len(characters) != expected_count:
+            print(f"⚠️  Character count mismatch: Expected {expected_count}, got {len(characters)}")
+            print(f"   Characters found: {[c['name'] for c in characters]}")
+        else:
+            print(f"✅ Character count correct: {len(characters)}/{expected_count}")
+        
+        return characters if characters else None
+
     def validate_character_usage(self, text: str) -> tuple[bool, List[str]]:
         """
         Validate that no dead characters appear in the text

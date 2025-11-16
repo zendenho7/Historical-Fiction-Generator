@@ -22,17 +22,37 @@ class StatefulHistoryGenerator:
     def _trim_to_word_limit(self, text, max_words=1000, min_words=500):
         """
         Enhanced trim with better sentence boundary detection
+        PRESERVES metadata sections (anything after --- separator)
         """
-        words = text.split()
+        # FIRST: Check if there's a metadata section and extract it
+        metadata_pattern = r'\n-{3,}\s*\n\s*CHARACTERS:\s*\n'
+        import re
+        
+        metadata_match = re.search(metadata_pattern, text, re.IGNORECASE)
+        metadata_section = ""
+        narrative_only = text
+        
+        if metadata_match:
+            # Separate narrative from metadata
+            narrative_only = text[:metadata_match.start()].strip()
+            metadata_section = text[metadata_match.start():].strip()
+            print(f"📋 Detected metadata section ({len(metadata_section.split())} words)")
+        
+        # NOW: Trim only the NARRATIVE portion (not the metadata)
+        words = narrative_only.split()
         word_count = len(words)
         
-        # If within range, return as-is
+        # If within range, return as-is (with metadata reattached)
         if min_words <= word_count <= max_words:
-            return text
+            if metadata_section:
+                return narrative_only + "\n\n" + metadata_section
+            return narrative_only
         
-        # If too short, return as-is (can't expand here)
+        # If too short, return as-is
         if word_count < min_words:
-            return text
+            if metadata_section:
+                return narrative_only + "\n\n" + metadata_section
+            return narrative_only
         
         # If too long, trim intelligently
         if word_count > max_words:
@@ -42,25 +62,33 @@ class StatefulHistoryGenerator:
             
             # Find last paragraph break (double newline)
             last_para = trimmed_text.rfind('\n\n')
-            if last_para > len(trimmed_text) * 0.85:  # Within 85% of target
-                return trimmed_text[:last_para]
+            if last_para > len(trimmed_text) * 0.85:
+                trimmed_narrative = trimmed_text[:last_para]
+            else:
+                # Find last sentence
+                sentence_ends = [
+                    trimmed_text.rfind('.'),
+                    trimmed_text.rfind('!'),
+                    trimmed_text.rfind('?')
+                ]
+                last_sentence = max(sentence_ends)
+                
+                if last_sentence > len(trimmed_text) * 0.90:
+                    trimmed_narrative = trimmed_text[:last_sentence + 1]
+                else:
+                    # Fallback: hard cut with ellipsis
+                    trimmed_narrative = ' '.join(words[:max_words-1]) + "..."
             
-            # Find last sentence
-            sentence_ends = [
-                trimmed_text.rfind('.'),
-                trimmed_text.rfind('!'),
-                trimmed_text.rfind('?')
-            ]
-            last_sentence = max(sentence_ends)
-            
-            if last_sentence > len(trimmed_text) * 0.90:  # Within 90% of target
-                return trimmed_text[:last_sentence + 1]
-            
-            # Fallback: hard cut with ellipsis
-            return ' '.join(words[:max_words-1]) + "..."
+            # Reattach metadata section
+            if metadata_section:
+                return trimmed_narrative + "\n\n" + metadata_section
+            return trimmed_narrative
         
-        return text
-    
+        # Default fallback
+        if metadata_section:
+            return narrative_only + "\n\n" + metadata_section
+        return narrative_only
+ 
     def _extract_text(self, response):
         """Safely extract text from Gemini response"""
         if hasattr(response, 'candidates') and response.candidates:
@@ -142,8 +170,9 @@ Generate the initial skeleton chronology. Focus on:
 - Basic narrative flow
 
 Target: 500-800 words for this initial stage. DO NOT EXCEED 800 WORDS.
-"""
-                
+
+IMPORTANT: If your prompt includes character metadata requirements, include them at the end AFTER your narrative content. If not required, do not include any metadata segment after the narrative content, keep it concise with proper formatting for the content.
+"""   
                 stage1_response = self.model.generate_content(
                     stage1_prompt,
                     generation_config={
@@ -203,6 +232,8 @@ OUTPUT REQUIREMENT: Generate the COMPLETE refined chronology (not just additions
 Count your words as you write. Stop at 1000 words maximum.
 
 REMEMBER: Final output must be 500-1000 words. Currently at {stage1_word_count} words.
+
+CRITICAL: If the original prompt required a metadata section (like CHARACTERS:), you MUST include it at the end of your output after the narrative content, separated by ---. If not required, do not include any metadata segment after the narrative content, keep it concise with proper formatting for the content.
 """
                 
                 stage2_response = self.model.generate_content(
@@ -240,10 +271,25 @@ REMEMBER: Final output must be 500-1000 words. Currently at {stage1_word_count} 
                         'places': list(self.tracked_entities['places'])[:15]
                     }
 
+                # Calculate entity consistency (NEW)
+                consistency_score = 0.0
+                consistency_details = {}
+
+                if session_manager.character_manager:
+                    consistency_score, consistency_details = session_manager.character_manager.calculate_entity_consistency(final_content)
+                    
+                    # Log consistency issues for debugging
+                    if consistency_score < 0.7:
+                        print(f"⚠️ Low entity consistency: {consistency_score:.1%}")
+                        if consistency_details.get('false_negatives'):
+                            print(f"  Missing characters: {consistency_details['false_negatives']}")
+
                 return {
                     'success': True,
                     'final_text': final_content,
                     'entities': entities,
+                    'entity_consistency': consistency_score,
+                    'consistency_details': consistency_details,
                     'stages': {
                         'stage1_word_count': stage1_word_count,
                         'stage2_word_count': final_word_count,
