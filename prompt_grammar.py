@@ -204,7 +204,31 @@ CRITICAL CHARACTER RULES:
 - Only use ACTIVE characters in your narrative
 - NEVER mention DECEASED characters unless reviving them with in-universe explanation
 - Maintain consistency with established character states and actions
-- Reference their previous actions and relationships"""
+- Reference their previous actions and relationships
+
+CHARACTER REVIVAL GUIDELINES:
+If you want to revive a deceased character, you MUST:
+1. Provide a clear in-universe explanation (magic, divine intervention, false death, etc.)
+2. Use explicit revival language: "was resurrected", "returned from the dead", "was revived"
+3. Make it a significant narrative moment (not casual or accidental)
+4. Acknowledge their previous death in the story
+
+Valid Revival Examples:
+✓ "Queen Lyra was resurrected by ancient magic, returning to reclaim her throne"
+✓ "It was revealed that King Alaric had survived the assassination attempt"
+✓ "Through divine intervention, Commander Theron was brought back to life"
+✓ "The necromancer's ritual revived Prince Marcus from death"
+
+Invalid Revival Examples:
+✗ Casually mentioning deceased characters as if alive
+✗ Vague references without clear revival mechanism
+✗ Ignoring their death entirely
+
+CONSEQUENCES OF REVIVAL:
+- Character should reference their death experience
+- Other characters should react to their return
+- Revival should have narrative weight and implications"""
+            
         
         # 5. Causal Context (previous events)
         formatted_causal_context = ""

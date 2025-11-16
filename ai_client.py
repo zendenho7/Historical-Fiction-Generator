@@ -113,7 +113,7 @@ class HistoricalFictionGenerator:
             if session_manager:
                 if is_streamlit_available():
                     import streamlit as st
-                    with st.expander("🐛 DEBUG: View Generated Prompt", expanded=False):
+                    with st.expander("View Generated Prompt", expanded=False):
                         st.code(base_prompt, language="text")
             
             # TECHNIQUE 2 & 3: Multi-stage pipeline with state tracking
@@ -152,11 +152,6 @@ class HistoricalFictionGenerator:
             
             if not content:
                 raise Exception("No content generated")
-            
-            if is_streamlit_available():
-                import streamlit as st
-                with st.expander("🐛 DEBUG: View Generated Content", expanded=False):
-                    st.code(content, language="text")
             
             # Update session with generated content
             event_node = session_manager.event_chain.add_event(current_event, content)

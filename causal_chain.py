@@ -235,37 +235,205 @@ class CausalEventChain:
             event_node.add_consequence(cons)
             self.add_open_thread(cons)
         
-        # 🆕 NEW: Extract deaths and update CharacterManager
+        # ENHANCED: Extract deaths & revivals and update CharacterManager
         if character_manager:
+            # EXPANDED death detection patterns
             death_patterns = [
-                r"(\w+(?:\s+\w+)?)\s+(?:was\s+)?(?:killed|died|perished|murdered|slain|assassinated|falls\s+to)",
-                r"(?:death|demise|execution)\s+of\s+(\w+(?:\s+\w+)?)",
-                r"(\w+(?:\s+\w+)?)\s+(?:death|demise)",
+                # Direct kill verbs
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was\s+)?(?:killed|died|perished|murdered|slain|assassinated|executed|falls)",
+                
+                # Death/demise phrases
+                r"(?:death|demise|execution|assassination|killing|murder)\s+of\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)'?s?\s+(?:death|demise|execution|assassination)",
+                
+                # Passive voice constructions
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was|were)\s+(?:killed|slain|murdered|executed|assassinated)",
+                
+                # Plot twist phrases (your custom input scenarios)
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:meets|met)\s+(?:his|her|their)\s+(?:end|death|demise|fate)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:perishes|perished|falls|fell|dies|died)",
+                
+                # Specific death contexts
+                r"(?:kills|killing|slays|slaying)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:succumbs?|succumbed)\s+to",
+                
+                # Loss/mourning patterns
+                r"(?:loss|mourning|grief)\s+(?:of|for|over)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:is|was)\s+(?:no more|gone|lost)",
             ]
             
+            detected_deaths = set()  # Track unique deaths to avoid duplicates
+            
             for pattern in death_patterns:
-                matches = re.findall(pattern, content, re.IGNORECASE)
+                matches = re.findall(pattern, content, re.IGNORECASE | re.MULTILINE)
                 for match in matches:
                     char_name = match if isinstance(match, str) else match[0]
                     char_name = char_name.strip()
+                    
+                    # Skip if already processed
+                    if char_name in detected_deaths:
+                        continue
                     
                     # Check if this is a known character
                     normalized_name = character_manager._normalize_name(char_name)
                     if normalized_name in character_manager.roster:
                         char = character_manager.roster[normalized_name]
                         if char.status == "alive":
+                            # Extract cause of death from surrounding context
+                            cause = f"Event {event_node.event_number}"
+                            
+                            # Try to extract more specific cause (50 chars around the match)
+                            try:
+                                match_pos = content.lower().find(char_name.lower())
+                                if match_pos >= 0:
+                                    context_start = max(0, match_pos - 50)
+                                    context_end = min(len(content), match_pos + 100)
+                                    context = content[context_start:context_end]
+                                    cause = f"{context[:80]}..." if len(context) > 80 else context
+                            except:
+                                pass
+                            
                             character_manager.kill_character(
                                 char.name,
-                                cause=f"Died in Event {event_node.event_number}"
+                                cause=cause
                             )
+                            detected_deaths.add(char_name)
                             print(f"⚰️ Marked {char.name} as deceased in Event {event_node.event_number}")
+                            print(f"   Cause: {cause[:100]}")
+
+            # REVIVAL detection patterns
+            # STRICTER revival detection patterns - require explicit revival language
+            revival_patterns = [
+                # Direct revival verbs (MUST have explicit revival words)
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was|were|is|are)\s+(?:revived|resurrected|reborn|brought\s+back\s+(?:to\s+life|from\s+(?:the\s+)?dead)|restored\s+to\s+life)",
+                
+                # Revival magic/divine intervention (MUST have action verb)
+                r"(?:revive|revives|revived|resurrect|resurrects|resurrected|bring\s+back|brings\s+back|brought\s+back|restore|restores|restored)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:returns?|returned|comes?\s+back|came\s+back)\s+from\s+(?:the\s+)?dead",
+                
+                # Resurrection/rebirth phrases (MUST have explicit noun)
+                r"(?:resurrection|rebirth|revival)\s+of\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)'?s?\s+(?:resurrection|rebirth|revival)",
+                
+                # False death revelations (MUST have negation + dead)
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:wasn't|was\s+not|weren't|were\s+not)\s+(?:actually\s+)?dead",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:had\s+)?survived",
+                r"(?:believed|thought|presumed|declared)\s+(?:to\s+be\s+)?dead,?\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:emerged|appeared|returned|was\s+found\s+alive)",
+                
+                # Magical/fantasy revival contexts (MUST have revival mechanism)
+                r"(?:phoenix|necromancy|divine\s+intervention|miracle|resurrection\s+spell|revival\s+ritual|healing\s+magic)\s+(?:revive|revives|revived|resurrect|resurrects|resurrected|bring\s+back|brings\s+back|brought\s+back)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
+                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:rise|rises|rose)\s+from\s+(?:the\s+)?(?:dead|grave|ashes)",
+                
+                # Scientific/medical revival (MUST have revival context)
+                r"(?:revive|revived|resuscitate|resuscitated|save|saved)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+from\s+death",
+            ]
             
-            # Track character mentions
-            for char_name, char_state in character_manager.roster.items():
-                if char_state.name.lower() in content.lower():
-                    event_node.add_affected_character(char_state.name)
-                    char_state.update_mention(event_node.event_number)
+            # CRITICAL: Keywords that MUST be present for valid revival
+            revival_keywords = [
+                'revive', 'revived', 'resurrect', 'resurrected', 'resurrection',
+                'brought back', 'bring back', 'return from death', 'returned from dead',
+                'reborn', 'rebirth', 'risen', 'rise from', 'rose from',
+                'not dead', "wasn't dead", "wasn't actually dead",
+                'survived', 'miracle', 'divine intervention', 'necromancy',
+                'phoenix', 'restoration', 'restored to life'
+            ]
+            
+            detected_revivals = set()
+            
+            # PRE-CHECK: Does the content contain ANY revival keywords?
+            content_lower = content.lower()
+            has_revival_context = any(keyword in content_lower for keyword in revival_keywords)
+            
+            if not has_revival_context:
+                # No revival keywords found - skip revival detection entirely
+                print(f"   ℹ️ No revival keywords detected in Event {event_node.event_number}")
+            else:
+                print(f"   🔍 Revival keywords detected, analyzing patterns...")
+                
+                for pattern in revival_patterns:
+                    matches = re.findall(pattern, content, re.IGNORECASE | re.MULTILINE)
+                    for match in matches:
+                        char_name = match if isinstance(match, str) else match
+                        char_name = char_name.strip()
+                        
+                        # Skip if already processed
+                        if char_name in detected_revivals:
+                            continue
+                        
+                        # Check if this is a known character
+                        normalized_name = character_manager._normalize_name(char_name)
+                        if normalized_name in character_manager.roster:
+                            char = character_manager.roster[normalized_name]
+                            
+                            # CRITICAL: Only revive if character is actually dead
+                            if char.status == "dead":
+                                # EXTRA VALIDATION: Check context around the match
+                                match_pos = content_lower.find(char_name.lower())
+                                if match_pos >= 0:
+                                    # Get 100 chars before and after for context
+                                    context_start = max(0, match_pos - 100)
+                                    context_end = min(len(content), match_pos + 100)
+                                    context = content[context_start:context_end].lower()
+                                    
+                                    # Verify revival keyword is near the character name
+                                    has_keyword_nearby = any(
+                                        keyword in context 
+                                        for keyword in revival_keywords
+                                    )
+                                    
+                                    if not has_keyword_nearby:
+                                        print(f"   ⚠️ Revival pattern matched {char.name} but no revival keyword nearby - IGNORED")
+                                        continue
+                                
+                                # Extract revival reason from surrounding context
+                                revival_reason = f"Revived in Event {event_node.event_number}"
+                                
+                                try:
+                                    if match_pos >= 0:
+                                        context_start = max(0, match_pos - 50)
+                                        context_end = min(len(content), match_pos + 150)
+                                        context = content[context_start:context_end]
+                                        
+                                        # Look for revival mechanisms in context
+                                        revival_mechanisms = [
+                                            'magic', 'spell', 'ritual', 'divine', 'phoenix', 'necromancy',
+                                            'miracle', 'healed', 'cured', 'saved', 'resurrected', 
+                                            'false death', 'survived', 'faked death', 'appeared alive',
+                                            'not actually dead', "wasn't dead"
+                                        ]
+                                        
+                                        found_mechanism = None
+                                        for mechanism in revival_mechanisms:
+                                            if mechanism in context.lower():
+                                                found_mechanism = mechanism
+                                                break
+                                        
+                                        if found_mechanism:
+                                            revival_reason = f"via {found_mechanism} - {context[:80]}..."
+                                        else:
+                                            revival_reason = context[:100] if len(context) <= 100 else context[:97] + "..."
+                                except:
+                                    pass
+                                
+                                # Revive the character
+                                success = character_manager.revive_character(
+                                    char.name,
+                                    reason=revival_reason
+                                )
+                                
+                                if success:
+                                    detected_revivals.add(char_name)
+                                    print(f"✨ Revived {char.name} in Event {event_node.event_number}")
+                                    print(f"   Reason: {revival_reason[:100]}")
+                                    
+                                    # Add to event's affected characters
+                                    event_node.add_affected_character(char.name)
+                            else:
+                                # Character is already alive - might be a false positive
+                                print(f"   ℹ️ Revival pattern detected for {char.name} but character is already {char.status}")
         
+                        deceased = character_manager.get_deceased_characters()
+
         # Clean up old threads
         self.clear_stale_threads(max_threads=5)
     

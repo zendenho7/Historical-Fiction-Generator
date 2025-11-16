@@ -16,6 +16,8 @@ class CharacterState:
         self.last_mentioned = event_introduced
         self.death_event = None
         self.revival_event = None
+        self.death_count = None
+        self.revival_count = None
         self.relationships = {}  # {character_name: relationship_type}
         self.notable_actions = []  # List of important things they did
     
@@ -50,6 +52,8 @@ class CharacterState:
             'last_mentioned': self.last_mentioned,
             'death_event': self.death_event,
             'revival_event': self.revival_event,
+            'death_count': len([a for a in self.notable_actions if 'Died:' in a]),
+            'revival_count': len([a for a in self.notable_actions if 'Revived:' in a]),
             'relationships': self.relationships,
             'notable_actions': self.notable_actions
         }
@@ -62,6 +66,8 @@ class CharacterState:
         char.last_mentioned = data.get('last_mentioned', 1)
         char.death_event = data.get('death_event')
         char.revival_event = data.get('revival_event')
+        char.death_count = data.get('death_count')
+        char.revival_count = data.get('revival_count')
         char.relationships = data.get('relationships', {})
         char.notable_actions = data.get('notable_actions', [])
         return char
@@ -196,13 +202,81 @@ class CharacterManager:
         return False
     
     def revive_character(self, name: str, reason: str) -> bool:
-        """Revive a dead character (requires in-universe reason)"""
+        """
+        Revive a dead character (requires in-universe reason)
+        
+        Args:
+            name: Character name
+            reason: In-universe explanation for revival (required)
+        
+        Returns:
+            bool: True if revival successful, False otherwise
+        """
         char = self.get_character(name)
-        if char and char.status == "dead":
-            char.revive(self.current_event_num, reason)
-            return True
-        return False
-    
+        
+        if not char:
+            print(f"⚠️ Cannot revive {name}: Character not found in roster")
+            return False
+        
+        if char.status != "dead":
+            print(f"⚠️ Cannot revive {name}: Character is already {char.status}")
+            return False
+        
+        if not reason or len(reason.strip()) < 5:
+            print(f"⚠️ Cannot revive {name}: Invalid revival reason (must be at least 5 characters)")
+            return False
+        
+        # Perform revival
+        char.revive(self.current_event_num, reason)
+        
+        # Log the revival
+        print(f"✅ Revival successful: {name}")
+        print(f"   Previous death: Event {char.death_event}")
+        print(f"   Revival: Event {self.current_event_num}")
+        print(f"   Reason: {reason}")
+        
+        return True
+
+    def get_revived_characters(self) -> List[CharacterState]:
+        """Get all characters who have been revived (died and came back)"""
+        return [
+            char for char in self.roster.values() 
+            if char.revival_event is not None
+        ]
+
+    def validate_revival_attempt(self, name: str, content: str) -> tuple[bool, str]:
+        """
+        Validate if a revival attempt is narratively sound
+        
+        Returns:
+            (is_valid, reason/error_message)
+        """
+        char = self.get_character(name)
+        
+        if not char:
+            return False, f"Character {name} not found"
+        
+        if char.status != "dead":
+            return False, f"{name} is not dead (current status: {char.status})"
+        
+        # Check if character died recently (within last 2 events)
+        events_since_death = self.current_event_num - (char.death_event or 0)
+        if events_since_death > 5:
+            return False, f"{name} died {events_since_death} events ago - too long for typical revival"
+        
+        # Check if revival mechanism is mentioned in content
+        revival_mechanisms = [
+            'magic', 'divine', 'miracle', 'resurrection', 'spell', 'ritual',
+            'phoenix', 'necromancy', 'healed', 'survived', 'faked', 'false death'
+        ]
+        
+        has_mechanism = any(mechanism in content.lower() for mechanism in revival_mechanisms)
+        
+        if not has_mechanism:
+            return False, f"No revival mechanism found in content for {name}"
+        
+        return True, f"Revival of {name} is narratively valid"
+
     def get_active_characters(self) -> List[CharacterState]:
         """Get all alive characters"""
         return [char for char in self.roster.values() if char.status == "alive"]

@@ -754,6 +754,16 @@ with col1:
                 
                 if result['success']:
                     st.success("✅ Generation completed successfully!")
+
+                    # FORCE CHARACTER ROSTER REFRESH
+                    # Clear any cached character roster display
+                    if 'last_character_count' not in st.session_state:
+                        st.session_state.last_character_count = 0
+                    
+                    current_count = len(st.session_state.session_manager.character_manager.roster)
+                    if current_count != st.session_state.last_character_count:
+                        st.session_state.last_character_count = current_count
+                        st.session_state.needs_rerun = True
                 else:
                     st.error(f"❌ Generation failed: {result.get('error', 'Unknown error')}")
                     
@@ -829,6 +839,7 @@ with col2:
 
     active_chars = st.session_state.session_manager.character_manager.get_active_characters()
     deceased_chars = st.session_state.session_manager.character_manager.get_deceased_characters()
+    revived_chars = st.session_state.session_manager.character_manager.get_revived_characters()
 
     # === CHARACTER COUNT VALIDATION ===
     if active_chars or deceased_chars:
@@ -856,6 +867,7 @@ with col2:
             else:
                 st.error(f"❌ {actual_count - target_count} extra")
 
+    # === ACTIVE CHARACTERS ===
     if active_chars:
         st.markdown("**Active Characters:**")
         for char in sorted(active_chars, key=lambda c: c.role):
@@ -869,8 +881,16 @@ with col2:
             # Build display string
             display = f"{role_emoji} **{char.name}** ({char.role})"
             
+            # 🆕 ADD REVIVAL INDICATOR
+            if char.revival_event:
+                display += f" ✨"  # Sparkle indicates revival
+            
             # Add first appearance
             display += f" • Introduced: Event {char.first_appearance}"
+            
+            # 🆕 ADD REVIVAL INFO
+            if char.revival_event:
+                display += f" • Revived: Event {char.revival_event}"
             
             # Add action count
             if char.notable_actions:
@@ -880,17 +900,125 @@ with col2:
             
             # Show latest action in small text
             if char.notable_actions:
-                st.caption(f"Latest: {char.notable_actions[-1]}")
+                latest_action = char.notable_actions[-1]
+                
+                # 🆕 HIGHLIGHT REVIVAL IN LATEST ACTION
+                if "Revived:" in latest_action:
+                    st.caption(f"✨ {latest_action}")
+                else:
+                    st.caption(f"Latest: {latest_action}")
     else:
         st.caption("No characters yet")
 
+    # === DECEASED CHARACTERS ===
     if deceased_chars:
-        st.markdown("**Deceased:**")
-        for char in deceased_chars:
-            st.markdown(f"- 💀 **{char.name}** (Event {char.death_event})")
-            if char.notable_actions:
-                st.caption(f"Cause: {char.notable_actions[-1]}")
-    
+        st.markdown("")  # Spacer
+        with st.expander(f"⚰️ Deceased Characters ({len(deceased_chars)})", expanded=False):
+            for char in deceased_chars:
+                death_event = char.death_event if char.death_event else "Unknown"
+                
+                st.markdown(f"💀 **{char.name}** ({char.role})")
+                st.caption(f"└─ Died in Event {death_event}")
+                
+                # Show death cause if available
+                if char.notable_actions:
+                    # Find the death action
+                    death_action = None
+                    for action in char.notable_actions:
+                        if "Died:" in action:
+                            death_action = action
+                            break
+                    
+                    if death_action:
+                        cause = death_action.replace("Died:", "").strip()
+                        st.caption(f"└─ Cause: {cause}")
+                
+                st.markdown("")  # Spacer between characters
+
+    # === REVIVAL HISTORY SECTION ===
+    if revived_chars:
+        st.markdown("")  # Spacer
+        with st.expander(f"✨ Characters with Revival History ({len(revived_chars)})", expanded=False):
+            for char in revived_chars:
+                # Determine current status
+                status_emoji = "✅" if char.status == "alive" else "💀"
+                status_text = char.status.upper()
+                
+                st.markdown(f"🔄 **{char.name}** ({char.role}) - {status_emoji} {status_text}")
+                
+                # Death info
+                if char.death_event:
+                    st.caption(f"├─ 💀 Died: Event {char.death_event}")
+                    
+                    # Find death cause
+                    death_action = None
+                    for action in char.notable_actions:
+                        if "Died:" in action:
+                            death_action = action.replace("Died:", "").strip()
+                            break
+                    
+                    if death_action:
+                        # Truncate if too long
+                        death_display = death_action[:80] + "..." if len(death_action) > 80 else death_action
+                        st.caption(f"│  └─ {death_display}")
+                
+                # Revival info
+                if char.revival_event:
+                    st.caption(f"├─ ✨ Revived: Event {char.revival_event}")
+                    
+                    # Find revival reason
+                    revival_reason = None
+                    for action in char.notable_actions:
+                        if "Revived:" in action:
+                            revival_reason = action.replace("Revived:", "").strip()
+                            break
+                    
+                    if revival_reason:
+                        # Clean up the reason display
+                        if " - " in revival_reason:
+                            # Format: "via magic - context..."
+                            parts = revival_reason.split(" - ", 1)
+                            mechanism = parts
+                            context = parts if len(parts) > 1 else ""
+                            
+                            st.caption(f"│  ├─ Method: {mechanism}")
+                            if context:
+                                context_display = context[:100] + "..." if len(context) > 100 else context
+                                st.caption(f"│  └─ {context_display}")
+                        else:
+                            # Simple reason
+                            reason_display = revival_reason[:100] + "..." if len(revival_reason) > 100 else revival_reason
+                            st.caption(f"│  └─ {reason_display}")
+                
+                # Calculate lifecycle stats
+                death_count = len([a for a in char.notable_actions if "Died:" in a])
+                revival_count = len([a for a in char.notable_actions if "Revived:" in a])
+                
+                if death_count > 1 or revival_count > 1:
+                    st.caption(f"└─ 📊 Deaths: {death_count} | Revivals: {revival_count}")
+                
+                st.markdown("")  # Spacer between characters
+
+    # === LIFECYCLE STATISTICS ===
+    if active_chars or deceased_chars:
+        total_chars = len(active_chars) + len(deceased_chars)
+        total_deaths = len(deceased_chars) + len([c for c in active_chars if c.death_event])
+        total_revivals = len(revived_chars)
+        
+        if total_deaths > 0 or total_revivals > 0:
+            st.markdown("")  # Spacer
+            with st.expander("📊 Lifecycle Statistics", expanded=False):
+                stat_col1, stat_col2, stat_col3 = st.columns(3)
+                
+                with stat_col1:
+                    st.metric("Total Deaths", total_deaths)
+                
+                with stat_col2:
+                    st.metric("Total Revivals", total_revivals)
+                
+                with stat_col3:
+                    mortality_rate = (len(deceased_chars) / total_chars * 100) if total_chars > 0 else 0
+                    st.metric("Currently Dead", f"{mortality_rate:.0f}%")
     st.divider()
     
     if 'current_result' in st.session_state and st.session_state.current_result:
