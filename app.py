@@ -85,7 +85,6 @@ if 'generator' not in st.session_state:
 st.markdown('<div class="main-header">📚 Historical Fiction Generator</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">AI-Powered Chronology Generation with Advanced PCG Techniques</div>', unsafe_allow_html=True)
 
-# Add "About" expandable section at the top
 with st.expander("ℹ️ About This Tool - Click to Learn More", expanded=False):
     st.markdown("""
     ### 🎓 **Concepts Implemented**
@@ -107,17 +106,53 @@ with st.expander("ℹ️ About This Tool - Click to Learn More", expanded=False)
     #### 3️⃣ **Multi-Stage Generation Pipeline**
     - **What it does:** Generates content in two stages for higher quality
     - **How it works:**
-        - **Stage 1:** Creates initial skeleton with core events (500-850 words)
-        - **Stage 2:** Refines with entity awareness and narrative improvements (up to 1000 words)
+      - **Stage 1:** Creates initial skeleton with core events (500-850 words)
+      - **Stage 2:** Refines with entity awareness and narrative improvements (up to 1000 words)
     - **Impact:** Produces more coherent, polished chronologies with better internal consistency
     
     #### 4️⃣ **Parameter-Driven Content Variation**
     - **What it does:** Adjustable parameters control output characteristics
     - **Parameters available:**
-        - **Time Span:** Controls chronology length (brief/moderate/epic)
-        - **Event Density:** Controls detail level (sparse/moderate/rich)
-        - **Narrative Focus:** Shapes content emphasis (political/cultural/military/economic/personal)
+      - **Time Span:** Controls chronology length (brief/moderate/epic)
+      - **Event Density:** Controls detail level (sparse/moderate/rich)
+      - **Narrative Focus:** Shapes content emphasis (political/cultural/military/economic/personal)
     - **Impact:** Same theme generates different stories based on parameter combinations
+    
+    #### 5️⃣ **Character Lifecycle Management**
+    - **What it does:** Automatically tracks character births, deaths, and revivals throughout the narrative
+    - **How it works:** 
+      - Uses regex pattern matching to detect death events ("died", "was killed", "sacrificed", etc.)
+      - Tracks revival events ("revived", "returned to life", "resurrected")
+      - Maintains character status and history across multiple events
+    - **Example:** If "Queen Lyra passes away" appears in Year 145, she's moved to deceased characters with cause of death tracked
+    - **Impact:** Creates realistic character arcs with mortality consequences and potential magical revivals
+    
+    #### 6️⃣ **Causal Event Chain System**
+    - **What it does:** Maintains explicit cause-and-effect relationships between events
+    - **How it works:**
+      - Each event stores a "hook" that leads to the next event
+      - Tracks which characters are affected by each event
+      - Creates narrative threads that span multiple events
+    - **Example:** "Discovery of ancient artifact" (Event 1) → "Quest to retrieve it" (Event 2) → "Dragon encounter" (Event 3)
+    - **Impact:** Produces coherent narratives with clear consequences and narrative momentum
+    
+    #### 7️⃣ **Session Persistence & Memory**
+    - **What it does:** Saves and loads complete story sessions with all metadata
+    - **How it works:**
+      - Stores character rosters, event chains, and generation parameters in JSON format
+      - Allows resuming stories across multiple sessions
+      - Maintains character lifecycle data and event history
+    - **Example:** Save "Kingdom of Eldoria" session, close app, reload it later with all 5 characters and their fates intact
+    - **Impact:** Enables iterative story development and long-term narrative continuity
+    
+    #### 8️⃣ **Advanced Character Analytics**
+    - **What it does:** Provides statistical analysis of character lifecycles and mortality
+    - **How it works:**
+      - Calculates mortality rates, revival counts, and character action histories
+      - Tracks character appearances across events
+      - Monitors active vs. deceased character ratios
+    - **Example:** "Mortality Rate: 60% (3/5 characters deceased)", "Total Revivals: 1"
+    - **Impact:** Gives insight into narrative pacing and character importance
     
     ---
     
@@ -125,6 +160,7 @@ with st.expander("ℹ️ About This Tool - Click to Learn More", expanded=False)
     - **Word Count:** 500-1,000 words (enforced with AI prompting + post-processing)
     - **Format:** Chronological narrative with clear temporal markers
     - **Quality:** Believable, coherent history with cause-effect relationships
+    - **Character Tracking:** Automated lifecycle monitoring with death/revival detection
     
     ### 🔗 **External Resources Referenced**
     - GDC Talk: ["Procedurally Generating History in Caves of Qud"](https://www.youtube.com/watch?v=H0sLa1y3BW4)
@@ -133,11 +169,14 @@ with st.expander("ℹ️ About This Tool - Click to Learn More", expanded=False)
     
     ### 📖 **How to Use**
     1. **Select a theme** from the dropdown (9 options available)
-    2. **Adjust parameters** using sliders and dropdowns
-    3. **Add custom details** (optional) to seed specific elements
-    4. **Enable multi-stage generation** for higher quality (recommended)
-    5. **Click "Generate Chronology"** and wait ~20-30 seconds
-    6. **Export your results** in TXT or JSON format
+    2. **Set character count** using the slider (3-10 characters)
+    3. **Adjust parameters** using sliders and dropdowns
+    4. **Add custom details** (optional) to seed specific elements
+    5. **Enable multi-stage generation** for higher quality (recommended)
+    6. **Click "Generate Chronology"** and wait ~20-30 seconds
+    7. **Monitor character fates** in the Character Roster (deaths/revivals tracked automatically)
+    8. **Save your session** to preserve all progress
+    9. **Export your results** in TXT or JSON format
     """)
 
 st.markdown("---")  # Separator line
@@ -1224,7 +1263,7 @@ with col2:
 
 if st.session_state.needs_rerun:
     st.session_state.needs_rerun = False
-    st.rerun
+    st.rerun()
 
 # Footer
 st.divider()
