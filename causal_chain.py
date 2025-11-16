@@ -221,6 +221,331 @@ class CausalEventChain:
         
         return consequences[:3]  # Max 3 consequences per event
     
+    def _split_into_sentences(self, text: str) -> list:
+        """
+        Split text into sentences with proper handling of edge cases.
+        
+        Handles:
+        - Common abbreviations (Mr., Dr., etc.)
+        - Decimal numbers (3.14, Year 1.5)
+        - Ellipsis (...)
+        - Multiple punctuation marks
+        - Dialogue and quotations
+        
+        Returns:
+            List of sentence strings
+        """
+        if not text or not text.strip():
+            return []
+        
+        # Common abbreviations that shouldn't trigger sentence splits
+        abbreviations = {
+            'Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Sr.', 'Jr.',
+            'St.', 'Ave.', 'Blvd.', 'Rd.', 'vs.', 'etc.', 'i.e.', 'e.g.',
+            'Corp.', 'Inc.', 'Ltd.', 'Co.', 'Vol.', 'Rev.', 'Gen.',
+            'Capt.', 'Lt.', 'Sgt.', 'No.', 'Nos.'
+        }
+        
+        # Replace abbreviations temporarily to avoid false splits
+        # Use placeholder that won't appear in normal text
+        abbrev_placeholder = "<!ABR{}!>"
+        abbrev_map = {}
+        
+        for idx, abbrev in enumerate(abbreviations):
+            if abbrev in text:
+                placeholder = abbrev_placeholder.format(idx)
+                abbrev_map[placeholder] = abbrev
+                text = text.replace(abbrev, placeholder)
+        
+        # Handle ellipsis - don't split on "..."
+        text = text.replace('...', '<!ELLIPSIS!>')
+        
+        # Split on sentence boundaries: . ! ? followed by space and capital letter
+        # Also handle dialogue: ." or !" or ?"
+        sentence_pattern = r'(?<=[.!?])(?:(?=["\']?\s+[A-Z])|(?=["\']?\s*$))'
+        
+        raw_sentences = re.split(sentence_pattern, text)
+        
+        # Clean and restore sentences
+        sentences = []
+        for sentence in raw_sentences:
+            # Restore abbreviations
+            for placeholder, abbrev in abbrev_map.items():
+                sentence = sentence.replace(placeholder, abbrev)
+            
+            # Restore ellipsis
+            sentence = sentence.replace('<!ELLIPSIS!>', '...')
+            
+            # Strip whitespace
+            sentence = sentence.strip()
+            
+            # Only add non-empty sentences
+            if sentence:
+                sentences.append(sentence)
+        
+        return sentences
+    
+    def _process_death_detection(self, char_name: str, character_manager, 
+                             event_node: EventNode, sentence: str, 
+                             detected_set: set, confidence: str = 'HIGH'):
+        """
+        Process and register a detected character death.
+        
+        Args:
+            char_name: Extracted character name from pattern match
+            character_manager: CharacterManager instance
+            event_node: Current event being analyzed
+            sentence: Sentence where death was detected
+            detected_set: Set tracking already-processed deaths (avoid duplicates)
+            confidence: Detection confidence level ('HIGH' or 'MEDIUM')
+        """
+        # Skip if already processed
+        if char_name in detected_set:
+            return
+        
+        # Normalize name and check if character exists in roster
+        normalized_name = character_manager._normalize_name(char_name)
+        
+        if normalized_name not in character_manager.roster:
+            # Try fuzzy matching for partial/multi-word names
+            matched_char = self._fuzzy_match_character(char_name, character_manager)
+            if matched_char:
+                char_name = matched_char.name
+                normalized_name = character_manager._normalize_name(char_name)
+            else:
+                # Not a tracked character - skip
+                return
+        
+        char = character_manager.roster[normalized_name]
+        
+        # Only register death if character is currently alive
+        if char.status != "alive":
+            print(f"   ⚠️  {char.name} already marked as {char.status} - skipping")
+            return
+        
+        # Extract cause of death from sentence context
+        cause = self._extract_death_context(sentence, char_name, event_node.event_number)
+        
+        # Register the death in character manager
+        try:
+            character_manager.kill_character(char.name, cause=cause)
+            detected_set.add(char_name)
+            
+            # Add to event's affected characters
+            event_node.add_affected_character(char.name)
+            
+            # Log the detection
+            print(f"   💀 [{confidence}] Marked {char.name} as deceased")
+            print(f"      Context: {sentence[:100]}...")
+            
+        except Exception as e:
+            print(f"   ❌ Error registering death for {char_name}: {e}")
+
+
+    def _process_revival_detection(self, char_name: str, character_manager,
+                                event_node: EventNode, sentence: str,
+                                detected_set: set):
+        """
+        Process and register a detected character revival.
+        
+        Args:
+            char_name: Extracted character name from pattern match
+            character_manager: CharacterManager instance
+            event_node: Current event being analyzed
+            sentence: Sentence where revival was detected
+            detected_set: Set tracking already-processed revivals (avoid duplicates)
+        """
+        # Skip if already processed
+        if char_name in detected_set:
+            return
+        
+        # Normalize name and check if character exists
+        normalized_name = character_manager._normalize_name(char_name)
+        
+        if normalized_name not in character_manager.roster:
+            # Try fuzzy matching
+            matched_char = self._fuzzy_match_character(char_name, character_manager)
+            if matched_char:
+                char_name = matched_char.name
+                normalized_name = character_manager._normalize_name(char_name)
+            else:
+                # Not a tracked character
+                return
+        
+        char = character_manager.roster[normalized_name]
+        
+        # CRITICAL: Only revive if character is actually dead
+        if char.status != "dead":
+            print(f"   ℹ️  Revival pattern matched {char.name} but character is {char.status} - skipping")
+            return
+        
+        # Extract revival mechanism/reason from context
+        revival_reason = self._extract_revival_context(sentence, char_name, event_node.event_number)
+        
+        # Register the revival
+        try:
+            success = character_manager.revive_character(char.name, reason=revival_reason)
+            
+            if success:
+                detected_set.add(char_name)
+                
+                # Add to event's affected characters
+                event_node.add_affected_character(char.name)
+                
+                # Log the detection
+                print(f"   ✨ Revived {char.name} in Event {event_node.event_number}")
+                print(f"      Reason: {revival_reason[:100]}...")
+            else:
+                print(f"   ⚠️  Revival failed for {char.name} (character_manager returned False)")
+                
+        except Exception as e:
+            print(f"   ❌ Error registering revival for {char_name}: {e}")
+
+
+    def _fuzzy_match_character(self, partial_name: str, character_manager) -> object:
+        """
+        Attempt fuzzy matching for partial character names.
+        
+        Handles cases like:
+        - "Lyra" matching "Queen Lyra"
+        - "Kaelen" matching "Lord Kaelen"
+        
+        Args:
+            partial_name: Partial character name extracted from text
+            character_manager: CharacterManager instance
+            
+        Returns:
+            Character object if match found, None otherwise
+        """
+        partial_lower = partial_name.lower().strip()
+        
+        # Try exact substring match first
+        for char in character_manager.roster.values():
+            if partial_lower in char.name.lower() or char.name.lower() in partial_lower:
+                return char
+        
+        # Try word-level matching (handles "Queen Lyra" vs "Lyra")
+        partial_words = set(partial_lower.split())
+        for char in character_manager.roster.values():
+            char_words = set(char.name.lower().split())
+            # If any words match, consider it a match
+            if partial_words & char_words:
+                return char
+        
+        return None
+
+
+    def _extract_death_context(self, sentence: str, char_name: str, event_number: int) -> str:
+        """
+        Extract death cause/context from sentence.
+        
+        Args:
+            sentence: Sentence containing death mention
+            char_name: Character name
+            event_number: Current event number
+            
+        Returns:
+            Death cause description string
+        """
+        # Look for common death cause patterns
+        cause_patterns = [
+            r'(?:killed|slain|murdered)\s+(?:by|in)\s+([^.!?]{5,50})',
+            r'died\s+(?:from|of|in)\s+([^.!?]{5,50})',
+            r'succumbed\s+to\s+([^.!?]{5,50})',
+            r'(?:execution|assassination)\s+(?:by|of)\s+([^.!?]{5,50})',
+        ]
+        
+        for pattern in cause_patterns:
+            match = re.search(pattern, sentence, re.IGNORECASE)
+            if match:
+                cause = match.group(1).strip()
+                return f"{cause} (Event {event_number})"
+        
+        # Fallback: use sentence excerpt
+        # Find position of character name in sentence
+        try:
+            name_pos = sentence.lower().find(char_name.lower())
+            if name_pos >= 0:
+                # Get 80 chars around the name
+                start = max(0, name_pos - 30)
+                end = min(len(sentence), name_pos + 50)
+                context = sentence[start:end].strip()
+                
+                # Clean up
+                if not context.endswith(('.', '!', '?')):
+                    context += '...'
+                
+                return context
+        except:
+            pass
+        
+        # Ultimate fallback
+        return f"Died in Event {event_number}"
+
+
+    def _extract_revival_context(self, sentence: str, char_name: str, event_number: int) -> str:
+        """
+        Extract revival mechanism/reason from sentence.
+        
+        Args:
+            sentence: Sentence containing revival mention
+            char_name: Character name
+            event_number: Current event number
+            
+        Returns:
+            Revival reason description string
+        """
+        # Look for revival mechanism keywords
+        mechanism_keywords = {
+            'magic': 'via magic',
+            'spell': 'via spell',
+            'ritual': 'via ritual',
+            'necromancy': 'via necromancy',
+            'phoenix': 'via phoenix',
+            'miracle': 'via miracle',
+            'divine intervention': 'via divine intervention',
+            'healed': 'healed',
+            'cured': 'cured',
+            'saved': 'saved',
+            'resurrected': 'resurrected',
+            'not dead': 'was not actually dead',
+            'survived': 'survived',
+            'false death': 'false death',
+            'faked death': 'faked death',
+        }
+        
+        sentence_lower = sentence.lower()
+        
+        # Check for mechanism keywords
+        for keyword, description in mechanism_keywords.items():
+            if keyword in sentence_lower:
+                # Try to get more context
+                try:
+                    keyword_pos = sentence_lower.find(keyword)
+                    start = max(0, keyword_pos - 30)
+                    end = min(len(sentence), keyword_pos + 70)
+                    context = sentence[start:end].strip()
+                    
+                    return f"{description} - {context[:80]}..."
+                except:
+                    return f"{description} in Event {event_number}"
+        
+        # Fallback: use sentence excerpt around character name
+        try:
+            name_pos = sentence_lower.find(char_name.lower())
+            if name_pos >= 0:
+                start = max(0, name_pos - 30)
+                end = min(len(sentence), name_pos + 70)
+                context = sentence[start:end].strip()
+                
+                return f"Revived - {context[:80]}..."
+        except:
+            pass
+        
+        # Ultimate fallback
+        return f"Revived in Event {event_number}"
+
+
     def analyze_event_and_update(self, event_node: EventNode, character_manager=None):
         """Analyze event content and extract metadata"""
         content = event_node.content
@@ -237,202 +562,219 @@ class CausalEventChain:
         
         # ENHANCED: Extract deaths & revivals and update CharacterManager
         if character_manager:
-            # EXPANDED death detection patterns
-            death_patterns = [
-                # Direct kill verbs
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was\s+)?(?:killed|died|perished|murdered|slain|assassinated|executed|falls)",
+            # Get all active and deceased characters for matching
+            all_characters = list(character_manager.roster.values())
+            
+            # ===============================================================
+            # STAGE 1: DEATH DETECTION
+            # ===============================================================
+            
+            print(f"\n🔍 Analyzing Event {event_node.event_number} for character deaths...")
+            
+            # Split content into sentences for better context analysis
+            sentences = self._split_into_sentences(content)
+            
+            # Comprehensive death patterns - organized by confidence level
+            death_patterns_high_confidence = [
+                # === EXPLICIT DEATH VERBS (99% confidence) ===
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:was|were|is|are)\s+(?:killed|slain|murdered|executed|assassinated|beheaded|hanged|burned\s+alive|crucified)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:died|perished|expired|succumbed|fell)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:passed\s+away|passes\s+away|met\s+(?:his|her|their)\s+(?:death|end|demise|fate))',
                 
-                # Death/demise phrases
-                r"(?:death|demise|execution|assassination|killing|murder)\s+of\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)'?s?\s+(?:death|demise|execution|assassination)",
+                # === DEATH OF / POSSESSIVE DEATH (95% confidence) ===
+                r'\b(?:death|demise|execution|assassination|killing|murder|slaying|passing|loss)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\'?s\s+(?:death|demise|execution|assassination|passing|end|fate|murder)',
                 
-                # Passive voice constructions
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was|were)\s+(?:killed|slain|murdered|executed|assassinated)",
+                # === SACRIFICE / NOBLE DEATH (90% confidence) ===
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:sacrificed|sacrificing)\s+(?:herself|himself|themselves|their\s+life|her\s+life|his\s+life)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:gave|gives|giving)\s+(?:her|his|their)\s+life',
                 
-                # Plot twist phrases (your custom input scenarios)
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:meets|met)\s+(?:his|her|their)\s+(?:end|death|demise|fate)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:perishes|perished|falls|fell|dies|died)",
-                
-                # Specific death contexts
-                r"(?:kills|killing|slays|slaying)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:succumbs?|succumbed)\s+to",
-                
-                # Loss/mourning patterns
-                r"(?:loss|mourning|grief)\s+(?:of|for|over)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:is|was)\s+(?:no more|gone|lost)",
+                # === CAUSATIVE DEATH (85% confidence) ===
+                r'\b(?:killed|slew|slays|slaying|murdered|executing|executed|assassinated)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+                r'\b(?:kills|murders|slays)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
             ]
             
-            detected_deaths = set()  # Track unique deaths to avoid duplicates
+            death_patterns_medium_confidence = [
+                # === BATTLE/COMBAT DEATHS (70% confidence - needs context validation) ===
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:fell|falls)\s+(?:in\s+)?(?:battle|combat|war|the\s+siege|the\s+fight)',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:was|were)\s+(?:struck\s+down|cut\s+down|defeated|vanquished)\s+(?:by|in)',
+                
+                # === SUCCUMB PATTERNS (75% confidence) ===
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:succumbs?|succumbed)\s+to\s+(?:wounds|injuries|illness|disease|poison|age)',
+                
+                # === FINAL BREATH / END OF LIFE (80% confidence) ===
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:drew|draws|takes|took)\s+(?:her|his|their)\s+(?:final|last)\s+breath',
+                r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:breathed|breathes)\s+(?:her|his|their)\s+last',
+                
+                # === LOSS / MOURNING (65% confidence - requires validation) ===
+                r'\b(?:loss|mourning|grief|funeral)\s+(?:of|for|over)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+            ]
             
-            for pattern in death_patterns:
-                matches = re.findall(pattern, content, re.IGNORECASE | re.MULTILINE)
-                for match in matches:
-                    char_name = match if isinstance(match, str) else match[0]
-                    char_name = char_name.strip()
-                    
-                    # Skip if already processed
-                    if char_name in detected_deaths:
-                        continue
-                    
-                    # Check if this is a known character
-                    normalized_name = character_manager._normalize_name(char_name)
-                    if normalized_name in character_manager.roster:
-                        char = character_manager.roster[normalized_name]
-                        if char.status == "alive":
-                            # Extract cause of death from surrounding context
-                            cause = f"Event {event_node.event_number}"
-                            
-                            # Try to extract more specific cause (50 chars around the match)
-                            try:
-                                match_pos = content.lower().find(char_name.lower())
-                                if match_pos >= 0:
-                                    context_start = max(0, match_pos - 50)
-                                    context_end = min(len(content), match_pos + 100)
-                                    context = content[context_start:context_end]
-                                    cause = f"{context[:80]}..." if len(context) > 80 else context
-                            except:
-                                pass
-                            
-                            character_manager.kill_character(
-                                char.name,
-                                cause=cause
+            # FALSE POSITIVE FILTERS - Exclude these patterns
+            death_exclusion_patterns = [
+                r'almost\s+died',
+                r'nearly\s+(?:died|killed)',
+                r'could\s+have\s+died',
+                r'would\s+have\s+died',
+                r'should\s+have\s+died',
+                r'might\s+have\s+died',
+                r'threatened\s+to\s+kill',
+                r'wanted\s+to\s+kill',
+                r'trying\s+to\s+kill',
+                r'attempted\s+to\s+kill',
+                r'failed\s+to\s+kill',
+                r'plot\s+to\s+kill',
+                r'plan\s+to\s+kill',
+                r'vowed\s+to\s+kill',
+                r'death\s+(?:threat|wish|sentence)(?!\s+(?:was\s+)?(?:carried\s+out|executed))',
+                r'(?:fake|faked|false|staged)\s+(?:death|dying)',
+                r'(?:pretend|pretended|feign|feigned)\s+(?:death|to\s+die)',
+                r'near-death',
+                r'cheat(?:ed)?\s+death',
+                r'escape(?:d)?\s+death',
+                r'avoid(?:ed)?\s+death',
+                r'death\s+of\s+(?:the|a|an)\s+(?!character|person|leader|king|queen|emperor)',
+            ]
+            
+            detected_deaths = set()
+            
+            # Process each sentence for death detection
+            for sentence in sentences:
+                sentence_lower = sentence.lower()
+                
+                # FILTER: Skip if sentence contains exclusion patterns
+                if any(re.search(pattern, sentence_lower) for pattern in death_exclusion_patterns):
+                    continue
+                
+                # Try high confidence patterns first
+                for pattern in death_patterns_high_confidence:
+                    matches = re.finditer(pattern, sentence, re.IGNORECASE)
+                    for match in matches:
+                        char_name = match.group(1).strip()
+                        self._process_death_detection(
+                            char_name, 
+                            character_manager, 
+                            event_node, 
+                            sentence, 
+                            detected_deaths,
+                            confidence="HIGH"
+                        )
+                
+                # Try medium confidence patterns with additional validation
+                for pattern in death_patterns_medium_confidence:
+                    matches = re.finditer(pattern, sentence, re.IGNORECASE)
+                    for match in matches:
+                        char_name = match.group(1).strip()
+                        
+                        # ADDITIONAL VALIDATION for medium confidence
+                        death_keywords = ['death', 'die', 'died', 'kill', 'murder', 'slay', 
+                                        'dead', 'perish', 'fatal', 'demise', 'end', 'last']
+                        
+                        if any(keyword in sentence_lower for keyword in death_keywords):
+                            self._process_death_detection(
+                                char_name, 
+                                character_manager, 
+                                event_node, 
+                                sentence, 
+                                detected_deaths,
+                                confidence="MEDIUM"
                             )
-                            detected_deaths.add(char_name)
-                            print(f"⚰️ Marked {char.name} as deceased in Event {event_node.event_number}")
-                            print(f"   Cause: {cause[:100]}")
-
-            # REVIVAL detection patterns
-            # STRICTER revival detection patterns - require explicit revival language
-            revival_patterns = [
-                # Direct revival verbs (MUST have explicit revival words)
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:was|were|is|are)\s+(?:revived|resurrected|reborn|brought\s+back\s+(?:to\s+life|from\s+(?:the\s+)?dead)|restored\s+to\s+life)",
-                
-                # Revival magic/divine intervention (MUST have action verb)
-                r"(?:revive|revives|revived|resurrect|resurrects|resurrected|bring\s+back|brings\s+back|brought\s+back|restore|restores|restored)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:returns?|returned|comes?\s+back|came\s+back)\s+from\s+(?:the\s+)?dead",
-                
-                # Resurrection/rebirth phrases (MUST have explicit noun)
-                r"(?:resurrection|rebirth|revival)\s+of\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)'?s?\s+(?:resurrection|rebirth|revival)",
-                
-                # False death revelations (MUST have negation + dead)
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:wasn't|was\s+not|weren't|were\s+not)\s+(?:actually\s+)?dead",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:had\s+)?survived",
-                r"(?:believed|thought|presumed|declared)\s+(?:to\s+be\s+)?dead,?\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:emerged|appeared|returned|was\s+found\s+alive)",
-                
-                # Magical/fantasy revival contexts (MUST have revival mechanism)
-                r"(?:phoenix|necromancy|divine\s+intervention|miracle|resurrection\s+spell|revival\s+ritual|healing\s+magic)\s+(?:revive|revives|revived|resurrect|resurrects|resurrected|bring\s+back|brings\s+back|brought\s+back)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)",
-                r"([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+(?:rise|rises|rose)\s+from\s+(?:the\s+)?(?:dead|grave|ashes)",
-                
-                # Scientific/medical revival (MUST have revival context)
-                r"(?:revive|revived|resuscitate|resuscitated|save|saved)\s+([A-Z]\w+(?:\s+[A-Z]\w+)?)\s+from\s+death",
-            ]
             
-            # CRITICAL: Keywords that MUST be present for valid revival
-            revival_keywords = [
+            # ===============================================================
+            # STAGE 2: REVIVAL DETECTION (STRICT - Only explicit revivals)
+            # ===============================================================
+            
+            print(f"\n🔍 Analyzing Event {event_node.event_number} for character revivals...")
+            
+            # PRE-CHECK: Does content contain ANY revival keywords?
+            revival_keywords_required = [
                 'revive', 'revived', 'resurrect', 'resurrected', 'resurrection',
-                'brought back', 'bring back', 'return from death', 'returned from dead',
-                'reborn', 'rebirth', 'risen', 'rise from', 'rose from',
-                'not dead', "wasn't dead", "wasn't actually dead",
-                'survived', 'miracle', 'divine intervention', 'necromancy',
-                'phoenix', 'restoration', 'restored to life'
+                'brought back', 'bring back', 'brings back',
+                'return from death', 'returned from dead', 'returns from death',
+                'return to life', 'returned to life', 'returns to life',
+                'reborn', 'rebirth', 'rise from the dead', 'rose from the dead',
+                'risen from', 'rise from the ashes',
+                'not dead', 'wasn\'t dead', 'was not dead', 'weren\'t dead',
+                'still alive', 'survived', 'alive after all',
+                'miracle', 'divine intervention', 'necromancy', 'phoenix',
+                'restored to life', 'restoration', 'reviving', 'resurrecting'
             ]
             
-            detected_revivals = set()
-            
-            # PRE-CHECK: Does the content contain ANY revival keywords?
             content_lower = content.lower()
-            has_revival_context = any(keyword in content_lower for keyword in revival_keywords)
+            has_revival_context = any(keyword in content_lower for keyword in revival_keywords_required)
             
             if not has_revival_context:
-                # No revival keywords found - skip revival detection entirely
-                print(f"   ℹ️ No revival keywords detected in Event {event_node.event_number}")
+                print(f"   ℹ️ No revival keywords detected - skipping revival analysis")
             else:
-                print(f"   🔍 Revival keywords detected, analyzing patterns...")
+                print(f"   ✅ Revival keywords found - analyzing patterns...")
                 
-                for pattern in revival_patterns:
-                    matches = re.findall(pattern, content, re.IGNORECASE | re.MULTILINE)
-                    for match in matches:
-                        char_name = match if isinstance(match, str) else match
-                        char_name = char_name.strip()
-                        
-                        # Skip if already processed
-                        if char_name in detected_revivals:
-                            continue
-                        
-                        # Check if this is a known character
-                        normalized_name = character_manager._normalize_name(char_name)
-                        if normalized_name in character_manager.roster:
-                            char = character_manager.roster[normalized_name]
-                            
-                            # CRITICAL: Only revive if character is actually dead
-                            if char.status == "dead":
-                                # EXTRA VALIDATION: Check context around the match
-                                match_pos = content_lower.find(char_name.lower())
-                                if match_pos >= 0:
-                                    # Get 100 chars before and after for context
-                                    context_start = max(0, match_pos - 100)
-                                    context_end = min(len(content), match_pos + 100)
-                                    context = content[context_start:context_end].lower()
-                                    
-                                    # Verify revival keyword is near the character name
-                                    has_keyword_nearby = any(
-                                        keyword in context 
-                                        for keyword in revival_keywords
-                                    )
-                                    
-                                    if not has_keyword_nearby:
-                                        print(f"   ⚠️ Revival pattern matched {char.name} but no revival keyword nearby - IGNORED")
-                                        continue
-                                
-                                # Extract revival reason from surrounding context
-                                revival_reason = f"Revived in Event {event_node.event_number}"
-                                
-                                try:
-                                    if match_pos >= 0:
-                                        context_start = max(0, match_pos - 50)
-                                        context_end = min(len(content), match_pos + 150)
-                                        context = content[context_start:context_end]
-                                        
-                                        # Look for revival mechanisms in context
-                                        revival_mechanisms = [
-                                            'magic', 'spell', 'ritual', 'divine', 'phoenix', 'necromancy',
-                                            'miracle', 'healed', 'cured', 'saved', 'resurrected', 
-                                            'false death', 'survived', 'faked death', 'appeared alive',
-                                            'not actually dead', "wasn't dead"
-                                        ]
-                                        
-                                        found_mechanism = None
-                                        for mechanism in revival_mechanisms:
-                                            if mechanism in context.lower():
-                                                found_mechanism = mechanism
-                                                break
-                                        
-                                        if found_mechanism:
-                                            revival_reason = f"via {found_mechanism} - {context[:80]}..."
-                                        else:
-                                            revival_reason = context[:100] if len(context) <= 100 else context[:97] + "..."
-                                except:
-                                    pass
-                                
-                                # Revive the character
-                                success = character_manager.revive_character(
-                                    char.name,
-                                    reason=revival_reason
-                                )
-                                
-                                if success:
-                                    detected_revivals.add(char_name)
-                                    print(f"✨ Revived {char.name} in Event {event_node.event_number}")
-                                    print(f"   Reason: {revival_reason[:100]}")
-                                    
-                                    # Add to event's affected characters
-                                    event_node.add_affected_character(char.name)
-                            else:
-                                # Character is already alive - might be a false positive
-                                print(f"   ℹ️ Revival pattern detected for {char.name} but character is already {char.status}")
-        
-                        deceased = character_manager.get_deceased_characters()
+                # Comprehensive revival patterns - STRICT MATCHING ONLY
+                revival_patterns_explicit = [
+                    # === DIRECT REVIVAL VERBS (99% confidence) ===
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:was|were|is|are)\s+(?:revived|resurrected|reborn|restored\s+to\s+life)',
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:was|were|is|are)\s+brought\s+back\s+(?:to\s+life|from\s+(?:the\s+)?dead)',
+                    
+                    # === ACTIVE REVIVAL (95% confidence) ===
+                    r'\b(?:revive|revives|revived|resurrect|resurrects|resurrected|bring\s+back|brings\s+back|brought\s+back)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+                    
+                    # === RETURN FROM DEATH (90% confidence) ===
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:returns?|returned|comes?\s+back|came\s+back)\s+(?:from\s+(?:the\s+)?dead|to\s+life)',
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:rise|rises|rose|risen)\s+from\s+(?:the\s+)?(?:dead|grave|ashes)',
+                    
+                    # === RESURRECTION NOUN PHRASES (85% confidence) ===
+                    r'\b(?:resurrection|rebirth|revival)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\'?s\s+(?:resurrection|rebirth|revival)',
+                    
+                    # === FALSE DEATH REVELATION (80% confidence) ===
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:wasn\'t|was\s+not|weren\'t|were\s+not)\s+(?:actually|really|truly)?\s*dead',
+                    r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:had\s+)?survived\s+(?:the\s+)?(?:death|execution|attack|fall)',
+                    r'\b(?:thought|believed|presumed|declared|pronounced)\s+dead[,\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(?:emerged|appeared|returned|was\s+found\s+alive|reappeared)',
+                ]
+                
+                # STRICT EXCLUSIONS for revival (avoid false positives)
+                revival_exclusion_patterns = [
+                    r'will\s+(?:be\s+)?revive',
+                    r'could\s+(?:be\s+)?revive',
+                    r'might\s+(?:be\s+)?revive',
+                    r'should\s+(?:be\s+)?revive',
+                    r'cannot\s+(?:be\s+)?revive',
+                    r'can\'t\s+(?:be\s+)?revive',
+                    r'unable\s+to\s+revive',
+                    r'failed\s+to\s+revive',
+                    r'attempting\s+to\s+revive',
+                    r'trying\s+to\s+revive',
+                    r'hope\s+to\s+revive',
+                    r'plan\s+to\s+revive',
+                    r'ritual\s+to\s+revive',
+                    r'spell\s+to\s+revive',
+                ]
+                
+                detected_revivals = set()
+                
+                # Process each sentence for revival detection
+                for sentence in sentences:
+                    sentence_lower = sentence.lower()
+                    
+                    # FILTER: Skip if sentence contains exclusion patterns
+                    if any(re.search(pattern, sentence_lower) for pattern in revival_exclusion_patterns):
+                        continue
+                    
+                    # FILTER: Sentence must contain at least one required keyword
+                    if not any(keyword in sentence_lower for keyword in revival_keywords_required):
+                        continue
+                    
+                    # Try all revival patterns
+                    for pattern in revival_patterns_explicit:
+                        matches = re.finditer(pattern, sentence, re.IGNORECASE)
+                        for match in matches:
+                            char_name = match.group(1).strip()
+                            self._process_revival_detection(
+                                char_name,
+                                character_manager,
+                                event_node,
+                                sentence,
+                                detected_revivals
+                            )
 
         # Clean up old threads
         self.clear_stale_threads(max_threads=5)
