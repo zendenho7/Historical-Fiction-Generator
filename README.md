@@ -1,6 +1,4 @@
-# Historical Fiction Generator - Enhanced with Course Concepts
-
-Complete implementation with advanced procedural generation techniques from Technical Design course.
+# Historical Fiction Generator Using Gemini AI API
 
 ## 📦 Installation
 
